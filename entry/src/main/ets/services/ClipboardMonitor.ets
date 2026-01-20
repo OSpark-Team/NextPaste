@@ -162,6 +162,8 @@ export class ClipboardMonitor {
         await this.handleTextData(record);
       } else if (mimeType === pasteboard.MIMETYPE_PIXELMAP) {
         await this.handleImageData(record);
+      } else if (mimeType === pasteboard.MIMETYPE_TEXT_HTML) {
+        await this.handleTextData(record);
       } else {
         console.info('不支持的剪切板数据类型:', mimeType);
       }

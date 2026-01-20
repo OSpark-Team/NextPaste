@@ -26,7 +26,7 @@ export class WebSocketManager {
   private serverUrl: string = '';
   private isConnected: boolean = false;
   private heartbeatTimer: number = -1;
-  private heartbeatInterval: number = 30000; // 心跳间隔 30 秒
+  private heartbeatInterval: number = 5000; // 心跳间隔 5 秒
   private reconnectTimer: number = -1;
   private reconnectInterval: number = 5000; // 重连间隔 5 秒
   private shouldReconnect: boolean = false;
@@ -304,6 +304,7 @@ export class WebSocketManager {
         data: null
       });
       await this.ws.send(heartbeatMessage);
+      console.info('已发送心跳消息');
     } catch (error) {
       console.error('发送心跳失败:', JSON.stringify(error));
     }

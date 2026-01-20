@@ -61,7 +61,8 @@
           }
         ],
         "backgroundModes": [
-          "dataTransfer"
+          "dataTransfer",
+          "multiDeviceConnection"
         ]
       }
     ],
