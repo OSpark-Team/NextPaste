@@ -24,7 +24,7 @@
             "EntryAbility"
           ],
           "when": "always"
-        },
+        }
       },
       {
         "name": "ohos.permission.READ_PASTEBOARD",
@@ -35,6 +35,9 @@
           ],
           "when": "always"
         }
+      },
+      {
+        "name": "ohos.permission.PUBLISH_AGENT_REMINDER"
       }
     ],
     "abilities": [
@@ -58,7 +61,7 @@
           }
         ],
         "backgroundModes": [
-          "multiDeviceConnection"
+          "dataTransfer"
         ]
       }
     ],
