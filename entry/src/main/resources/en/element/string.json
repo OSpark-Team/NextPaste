@@ -1,0 +1,256 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Cross-device clipboard synchronization application"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Cross-device clipboard synchronization"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NextPaste"
+    },
+    {
+      "name": "reason_read_pasteboard",
+      "value": "Reads the clipboard to listen for changes and transfer data, enabling cross-device synchronization."
+    },
+    {
+      "name": "reason_keep_background_running",
+      "value": "Ensures the app can function while the screen is off, by using a background task for data transfer."
+    },
+    {
+      "name": "app_title",
+      "value": "NextPaste"
+    },
+    {
+      "name": "server_address_label",
+      "value": "Server Address"
+    },
+    {
+      "name": "server_address_placeholder",
+      "value": "Please enter WebSocket server address"
+    },
+    {
+      "name": "device_mode_label",
+      "value": "Device Mode"
+    },
+    {
+      "name": "mode_send_only",
+      "value": "Send Only"
+    },
+    {
+      "name": "mode_receive_only",
+      "value": "Receive Only"
+    },
+    {
+      "name": "mode_bidirectional",
+      "value": "Bidirectional Sync"
+    },
+    {
+      "name": "connection_status_label",
+      "value": "Connection Status"
+    },
+    {
+      "name": "status_disconnected",
+      "value": "Disconnected"
+    },
+    {
+      "name": "status_connecting",
+      "value": "Connecting"
+    },
+    {
+      "name": "status_connected",
+      "value": "Connected"
+    },
+    {
+      "name": "button_start",
+      "value": "Start Sync"
+    },
+    {
+      "name": "button_stop",
+      "value": "Stop Sync"
+    },
+    {
+      "name": "log_title",
+      "value": "Run Log"
+    },
+    {
+      "name": "log_clear",
+      "value": "Clear Log"
+    },
+    {
+      "name": "log_filter_all",
+      "value": "All"
+    },
+    {
+      "name": "log_filter_info",
+      "value": "Info"
+    },
+    {
+      "name": "log_filter_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "log_filter_error",
+      "value": "Error"
+    },
+    {
+      "name": "log_filter_success",
+      "value": "Success"
+    },
+    {
+      "name": "toast_server_address_empty",
+      "value": "Please enter server address"
+    },
+    {
+      "name": "toast_server_address_invalid",
+      "value": "Server address format is incorrect"
+    },
+    {
+      "name": "toast_connection_success",
+      "value": "Connection successful"
+    },
+    {
+      "name": "toast_connection_failed",
+      "value": "Connection failed"
+    },
+    {
+      "name": "toast_disconnected",
+      "value": "Disconnected"
+    },
+    {
+      "name": "log_app_started",
+      "value": "App started"
+    },
+    {
+      "name": "log_connecting",
+      "value": "Connecting to server..."
+    },
+    {
+      "name": "log_connected",
+      "value": "Connected to server"
+    },
+    {
+      "name": "log_disconnected",
+      "value": "Disconnected"
+    },
+    {
+      "name": "log_handshake_sent",
+      "value": "Handshake message sent"
+    },
+    {
+      "name": "log_clipboard_changed",
+      "value": "Clipboard change detected"
+    },
+    {
+      "name": "log_text_sent",
+      "value": "Text data sent"
+    },
+    {
+      "name": "log_image_sent",
+      "value": "Image data sent"
+    },
+    {
+      "name": "log_text_received",
+      "value": "Text data received"
+    },
+    {
+      "name": "log_image_received",
+      "value": "Image data received"
+    },
+    {
+      "name": "log_background_task_started",
+      "value": "Background task started"
+    },
+    {
+      "name": "log_background_task_stopped",
+      "value": "Background task stopped"
+    },
+    {
+      "name": "log_error_occurred",
+      "value": "Error occurred"
+    },
+    {
+      "name": "log_permission_denied",
+      "value": "Permission denied"
+    },
+    {
+      "name": "settings_section_title",
+      "value": "Settings"
+    },
+    {
+      "name": "collapse_settings",
+      "value": "Collapse Settings"
+    },
+    {
+      "name": "expand_settings",
+      "value": "Expand Settings"
+    },
+    {
+      "name": "log_level_info",
+      "value": "Info"
+    },
+    {
+      "name": "log_level_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "log_level_error",
+      "value": "Error"
+    },
+    {
+      "name": "log_level_success",
+      "value": "Success"
+    },
+    {
+      "name": "about_app_name",
+      "value": "NextPaste"
+    },
+    {
+      "name": "about_version",
+      "value": "Version 1.0.0 (HarmonyOS)"
+    },
+    {
+      "name": "about_team_title",
+      "value": "Development Team"
+    },
+    {
+      "name": "about_team_name",
+      "value": "OSpark Team"
+    },
+    {
+      "name": "about_repo_title",
+      "value": "Open Source Repository"
+    },
+    {
+      "name": "about_repo_url",
+      "value": "https://github.com/OSpark-Team/NextPaste"
+    },
+    {
+      "name": "about_feedback_title",
+      "value": "Feedback"
+    },
+    {
+      "name": "about_feedback_desc",
+      "value": "Submit an Issue for feedback"
+    },
+    {
+      "name": "about_download_button",
+      "value": "Download Desktop Client"
+    },
+    {
+      "name": "about_copyright",
+      "value": "© 2026 OSPark Open Source Project"
+    },
+    {
+      "name": "log_browser_start_success",
+      "value": "Browser started successfully"
+    },
+    {
+      "name": "log_browser_start_failed",
+      "value": "Startup failed"
+    }
+  ]
+}

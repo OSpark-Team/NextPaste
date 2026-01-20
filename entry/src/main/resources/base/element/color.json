@@ -1,0 +1,120 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "background_primary",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "background_secondary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "background_card",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "text_primary",
+      "value": "#1F1F1F"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#666666"
+    },
+    {
+      "name": "text_tertiary",
+      "value": "#999999"
+    },
+    {
+      "name": "divider_color",
+      "value": "#E5E5E5"
+    },
+    {
+      "name": "primary_color",
+      "value": "#007AFF"
+    },
+    {
+      "name": "primary_color_pressed",
+      "value": "#0051D5"
+    },
+    {
+      "name": "primary_color_disabled",
+      "value": "#B3D9FF"
+    },
+    {
+      "name": "success_color",
+      "value": "#34C759"
+    },
+    {
+      "name": "success_background",
+      "value": "#E8F5E9"
+    },
+    {
+      "name": "warning_color",
+      "value": "#FF9500"
+    },
+    {
+      "name": "warning_background",
+      "value": "#FFF3E0"
+    },
+    {
+      "name": "error_color",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "error_background",
+      "value": "#FFEBEE"
+    },
+    {
+      "name": "info_color",
+      "value": "#5AC8FA"
+    },
+    {
+      "name": "info_background",
+      "value": "#E3F2FD"
+    },
+    {
+      "name": "status_connected",
+      "value": "#34C759"
+    },
+    {
+      "name": "status_disconnected",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "status_connecting",
+      "value": "#FF9500"
+    },
+    {
+      "name": "input_background",
+      "value": "#F2F2F7"
+    },
+    {
+      "name": "input_border",
+      "value": "#C7C7CC"
+    },
+    {
+      "name": "input_border_focused",
+      "value": "#007AFF"
+    },
+    {
+      "name": "button_background",
+      "value": "#007AFF"
+    },
+    {
+      "name": "button_text",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "shadow_color",
+      "value": "#1A000000"
+    },
+    {
+      "name": "divider",
+      "value": "#E5E5E5"
+    }
+  ]
+}

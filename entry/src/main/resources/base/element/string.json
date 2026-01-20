@@ -1,0 +1,256 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "跨设备剪切板同步应用"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "跨设备剪切板同步"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NextPaste"
+    },
+    {
+      "name": "reason_read_pasteboard",
+      "value": "读取剪切板，用于监听变化及其转发数据实现跨设备同步。"
+    },
+    {
+      "name": "reason_keep_background_running",
+      "value": "确保息屏状态下可以正常使用应用，将会使用数据传输后台任务。"
+    },
+    {
+      "name": "app_title",
+      "value": "NextPaste"
+    },
+    {
+      "name": "server_address_label",
+      "value": "服务器地址"
+    },
+    {
+      "name": "server_address_placeholder",
+      "value": "请输入 WebSocket 服务器地址"
+    },
+    {
+      "name": "device_mode_label",
+      "value": "设备模式"
+    },
+    {
+      "name": "mode_send_only",
+      "value": "仅发送"
+    },
+    {
+      "name": "mode_receive_only",
+      "value": "仅接收"
+    },
+    {
+      "name": "mode_bidirectional",
+      "value": "双向同步"
+    },
+    {
+      "name": "connection_status_label",
+      "value": "连接状态"
+    },
+    {
+      "name": "status_disconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "status_connecting",
+      "value": "连接中"
+    },
+    {
+      "name": "status_connected",
+      "value": "已连接"
+    },
+    {
+      "name": "button_start",
+      "value": "开始同步"
+    },
+    {
+      "name": "button_stop",
+      "value": "停止同步"
+    },
+    {
+      "name": "log_title",
+      "value": "运行日志"
+    },
+    {
+      "name": "log_clear",
+      "value": "清空日志"
+    },
+    {
+      "name": "log_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "log_filter_info",
+      "value": "信息"
+    },
+    {
+      "name": "log_filter_warning",
+      "value": "警告"
+    },
+    {
+      "name": "log_filter_error",
+      "value": "错误"
+    },
+    {
+      "name": "log_filter_success",
+      "value": "成功"
+    },
+    {
+      "name": "toast_server_address_empty",
+      "value": "请输入服务器地址"
+    },
+    {
+      "name": "toast_server_address_invalid",
+      "value": "服务器地址格式不正确"
+    },
+    {
+      "name": "toast_connection_success",
+      "value": "连接成功"
+    },
+    {
+      "name": "toast_connection_failed",
+      "value": "连接失败"
+    },
+    {
+      "name": "toast_disconnected",
+      "value": "已断开连接"
+    },
+    {
+      "name": "log_app_started",
+      "value": "应用启动"
+    },
+    {
+      "name": "log_connecting",
+      "value": "正在连接服务器..."
+    },
+    {
+      "name": "log_connected",
+      "value": "已连接到服务器"
+    },
+    {
+      "name": "log_disconnected",
+      "value": "已断开连接"
+    },
+    {
+      "name": "log_handshake_sent",
+      "value": "已发送握手消息"
+    },
+    {
+      "name": "log_clipboard_changed",
+      "value": "检测到剪切板变化"
+    },
+    {
+      "name": "log_text_sent",
+      "value": "已发送文本数据"
+    },
+    {
+      "name": "log_image_sent",
+      "value": "已发送图片数据"
+    },
+    {
+      "name": "log_text_received",
+      "value": "已接收文本数据"
+    },
+    {
+      "name": "log_image_received",
+      "value": "已接收图片数据"
+    },
+    {
+      "name": "log_background_task_started",
+      "value": "后台任务已启动"
+    },
+    {
+      "name": "log_background_task_stopped",
+      "value": "后台任务已停止"
+    },
+    {
+      "name": "log_error_occurred",
+      "value": "发生错误"
+    },
+    {
+      "name": "log_permission_denied",
+      "value": "权限被拒绝"
+    },
+    {
+      "name": "settings_section_title",
+      "value": "设置"
+    },
+    {
+      "name": "collapse_settings",
+      "value": "收起设置"
+    },
+    {
+      "name": "expand_settings",
+      "value": "展开设置"
+    },
+    {
+      "name": "log_level_info",
+      "value": "信息"
+    },
+    {
+      "name": "log_level_warning",
+      "value": "警告"
+    },
+    {
+      "name": "log_level_error",
+      "value": "错误"
+    },
+    {
+      "name": "log_level_success",
+      "value": "成功"
+    },
+    {
+      "name": "about_app_name",
+      "value": "NextPaste"
+    },
+    {
+      "name": "about_version",
+      "value": "Version 1.0.0 (HarmonyOS)"
+    },
+    {
+      "name": "about_team_title",
+      "value": "开发团队"
+    },
+    {
+      "name": "about_team_name",
+      "value": "OSpark Team"
+    },
+    {
+      "name": "about_repo_title",
+      "value": "开源地址"
+    },
+    {
+      "name": "about_repo_url",
+      "value": "https://github.com/OSpark-Team/NextPaste"
+    },
+    {
+      "name": "about_feedback_title",
+      "value": "问题反馈"
+    },
+    {
+      "name": "about_feedback_desc",
+      "value": "提交 Issue 以反馈问题"
+    },
+    {
+      "name": "about_download_button",
+      "value": "下载桌面客户端"
+    },
+    {
+      "name": "about_copyright",
+      "value": "© 2026 OSPark Open Source Project"
+    },
+    {
+      "name": "log_browser_start_success",
+      "value": "浏览器启动成功"
+    },
+    {
+      "name": "log_browser_start_failed",
+      "value": "启动失败"
+    }
+  ]
+}
