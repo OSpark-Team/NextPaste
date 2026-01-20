@@ -33,7 +33,6 @@ export class ClipboardController {
   public init(context: common.UIAbilityContext): void {
     this.context = context;
     this.backgroundTaskManager.init(context);
-    this.viewModel.addLog(LogLevel.INFO, '应用启动');
   }
   
   /**
@@ -45,6 +44,16 @@ export class ClipboardController {
       if (connected) {
         this.viewModel.connectionStatus = ConnectionStatus.CONNECTED;
         this.viewModel.addLog(LogLevel.SUCCESS, '已连接到服务器');
+
+        // 启动后台任务
+        this.viewModel.addLog(LogLevel.INFO, '正在启动后台任务...');
+        this.backgroundTaskManager.startBackgroundTask().then((started: boolean) => {
+          if (started) {
+            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
+          } else {
+            this.viewModel.addLog(LogLevel.ERROR, '启动后台任务失败')
+          }
+        });
       } else {
         this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
         this.viewModel.addLog(LogLevel.WARNING, '已断开连接');
@@ -71,15 +80,6 @@ export class ClipboardController {
       this.viewModel.addLog(LogLevel.ERROR, '服务器地址格式不正确');
       return false;
     }
-    
-    // 启动后台任务
-    this.viewModel.addLog(LogLevel.INFO, '正在启动后台任务...');
-    const taskStarted = await this.backgroundTaskManager.startBackgroundTask();
-    if (!taskStarted) {
-      this.viewModel.addLog(LogLevel.ERROR, '启动后台任务失败');
-      return false;
-    }
-    this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
     
     // 连接 WebSocket
     this.viewModel.connectionStatus = ConnectionStatus.CONNECTING;
