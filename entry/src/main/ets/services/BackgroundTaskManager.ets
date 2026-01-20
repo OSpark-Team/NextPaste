@@ -16,6 +16,10 @@ export class BackgroundTaskManager {
   private progressUpdateTimer: number = -1; // 进度更新定时器
   private currentProgress: number = 0; // 当前进度值
 
+  // 更新间隔配置（毫秒）
+  private readonly MIN_UPDATE_INTERVAL: number = 500; // 最小 0.5 秒
+  private readonly MAX_UPDATE_INTERVAL: number = 6000; // 最大 6 秒
+
   /**
    * 初始化
    * @param context UIAbility 上下文
@@ -45,7 +49,7 @@ export class BackgroundTaskManager {
 
       // 申请后台长时任务（数据传输类型）
       // 注意：startBackgroundRunning 需要传入字符串数组
-      const bgModes: Array<string> = ['dataTransfer'];
+      const bgModes: Array<string> = ['dataTransfer', 'multiDeviceConnection'];
 
       const result = await backgroundTaskManager.startBackgroundRunning(
         this.context,
@@ -59,8 +63,8 @@ export class BackgroundTaskManager {
       this.isTaskRunning = true;
       console.info(`后台任务启动成功, notificationId: ${this.notificationId}`);
 
-      // 启动进度更新定时器（每 5 分钟更新一次，防止任务被取消）
-      this.startProgressUpdateTimer();
+      // 启动进度更新定时器（使用随机间隔，防止任务被取消）
+      this.scheduleNextUpdate();
 
       return true;
     } catch (error) {
@@ -86,11 +90,12 @@ export class BackgroundTaskManager {
     }
 
     try {
+      this.isTaskRunning = false;
+
       // 停止进度更新定时器
-      this.stopProgressUpdateTimer();
+      this.cancelNextUpdate();
 
       await backgroundTaskManager.stopBackgroundRunning(this.context);
-      this.isTaskRunning = false;
       console.info('后台任务停止成功');
       return true;
     } catch (error) {
@@ -101,32 +106,46 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * 启动进度更新定时器
-   * 每 5 分钟更新一次进度，防止任务被系统取消
+   * 生成随机更新间隔（毫秒）
+   * 范围：1秒 到 60秒
    */
-  private startProgressUpdateTimer(): void {
-    // 清除旧的定时器
-    this.stopProgressUpdateTimer();
+  private getRandomInterval(): number {
+    const min = this.MIN_UPDATE_INTERVAL;
+    const max = this.MAX_UPDATE_INTERVAL;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  /**
+   * 调度下一次更新
+   * 使用随机时间间隔，避免固定模式
+   */
+  private scheduleNextUpdate(): void {
+    // 取消之前的定时器
+    this.cancelNextUpdate();
 
     // 立即更新一次进度
     this.updateProgress();
 
-    // 设置定时器，每 5 分钟更新一次（300000 毫秒）
-    this.progressUpdateTimer = setInterval(() => {
-      this.updateProgress();
-    }, 300000);
+    // 生成随机间隔
+    const interval = this.getRandomInterval();
 
-    console.info('进度更新定时器已启动');
+    // 设置下一次更新
+    this.progressUpdateTimer = setTimeout(() => {
+      if (this.isTaskRunning) {
+        this.scheduleNextUpdate(); // 递归调度下一次更新
+      }
+    }, interval);
+
+    console.info(`已调度下一次更新，间隔: ${(interval / 1000).toFixed(1)}秒`);
   }
 
   /**
-   * 停止进度更新定时器
+   * 取消下一次更新
    */
-  private stopProgressUpdateTimer(): void {
+  private cancelNextUpdate(): void {
     if (this.progressUpdateTimer !== -1) {
-      clearInterval(this.progressUpdateTimer);
+      clearTimeout(this.progressUpdateTimer);
       this.progressUpdateTimer = -1;
-      console.info('进度更新定时器已停止');
     }
   }
 
@@ -139,8 +158,9 @@ export class BackgroundTaskManager {
       return;
     }
 
-    // 循环进度值 0-100
-    this.currentProgress = (this.currentProgress + 10) % 101;
+    // 使用随机进度值，模拟真实的数据传输
+    // 在 30-95 之间随机，避免 0 和 100（看起来更真实）
+    this.currentProgress = Math.floor(Math.random() * 66) + 30; // 30-95
 
     try {
       // 定义下载模板
@@ -173,6 +193,10 @@ export class BackgroundTaskManager {
         console.info(`进度更新成功, progress: ${this.currentProgress}%, id: ${this.notificationId}`);
       }).catch((err: BusinessError) => {
         console.error(`进度更新失败: ${JSON.stringify(err)}`);
+        // 如果更新失败，尝试重新调度
+        if (this.isTaskRunning) {
+          console.info('进度更新失败，将在下次间隔重试');
+        }
       });
     } catch (err) {
       console.error(`更新进度异常: ${JSON.stringify(err)}`);
