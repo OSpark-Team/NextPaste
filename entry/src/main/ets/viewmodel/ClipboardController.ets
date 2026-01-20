@@ -46,7 +46,6 @@ export class ClipboardController {
         this.viewModel.addLog(LogLevel.SUCCESS, '已连接到服务器');
 
         // 启动后台任务
-        this.viewModel.addLog(LogLevel.INFO, '正在启动后台任务...');
         this.backgroundTaskManager.startBackgroundTask().then((started: boolean) => {
           if (started) {
             this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
@@ -55,6 +54,15 @@ export class ClipboardController {
           }
         });
       } else {
+        // 停止后台任务
+        this.backgroundTaskManager.stopBackgroundTask().then((started: boolean) => {
+          if (started) {
+            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已停止');
+          } else {
+            this.viewModel.addLog(LogLevel.ERROR, '停止后台任务失败')
+          }
+        });
+
         this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
         this.viewModel.addLog(LogLevel.WARNING, '已断开连接');
       }
@@ -88,7 +96,6 @@ export class ClipboardController {
     const connected = await this.webSocketManager.connect(this.viewModel.serverAddress);
     if (!connected) {
       this.viewModel.addLog(LogLevel.ERROR, '连接服务器失败');
-      await this.backgroundTaskManager.stopBackgroundTask();
       this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
       return false;
     }
@@ -112,10 +119,6 @@ export class ClipboardController {
     
     // 断开 WebSocket
     await this.webSocketManager.disconnect();
-    
-    // 停止后台任务
-    await this.backgroundTaskManager.stopBackgroundTask();
-    this.viewModel.addLog(LogLevel.INFO, '后台任务已停止');
     
     this.viewModel.isRunning = false;
     this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
