@@ -28,29 +28,40 @@ const statusText = computed(() =>
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
+  padding: 6px 14px;
+  background: var(--surface-dark);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-glass);
 }
 
 .status-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  transition: background-color 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .status-running {
-  background-color: #52c41a;
-  box-shadow: 0 0 8px rgba(82, 196, 26, 0.5);
+  background-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success-glow),
+              0 0 16px var(--color-success-glow);
+  animation: breathe 2s ease-in-out infinite;
 }
 
 .status-stopped {
-  background-color: #d9d9d9;
+  background-color: var(--text-muted);
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .status-text {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.status-running + .status-text {
+  color: var(--color-success);
 }
 </style>
-
