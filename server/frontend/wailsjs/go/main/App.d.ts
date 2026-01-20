@@ -10,6 +10,12 @@ export function GetLogs():Promise<Array<main.LogEntry>>;
 
 export function GetServerStatus():Promise<Record<string, any>>;
 
+export function HideWindow():Promise<void>;
+
+export function Quit():Promise<void>;
+
+export function ShowWindow():Promise<void>;
+
 export function StartServer(arg1:string,arg2:number):Promise<void>;
 
 export function StopServer():Promise<void>;

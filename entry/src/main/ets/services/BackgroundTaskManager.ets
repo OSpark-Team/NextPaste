@@ -49,7 +49,7 @@ export class BackgroundTaskManager {
 
       // 申请后台长时任务（数据传输类型）
       // 注意：startBackgroundRunning 需要传入字符串数组
-      const bgModes: Array<string> = ['dataTransfer', 'multiDeviceConnection'];
+      const bgModes: Array<string> = ['dataTransfer'];
 
       const result = await backgroundTaskManager.startBackgroundRunning(
         this.context,

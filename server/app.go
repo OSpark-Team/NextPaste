@@ -39,6 +39,25 @@ func NewApp() *App {
 	}
 }
 
+// ============================================
+// 窗口控制方法
+// ============================================
+
+// ShowWindow 显示主窗口
+func (a *App) ShowWindow() {
+	runtime.WindowShow(a.ctx)
+}
+
+// HideWindow 隐藏主窗口
+func (a *App) HideWindow() {
+	runtime.WindowHide(a.ctx)
+}
+
+// Quit 完全退出应用
+func (a *App) Quit() {
+	runtime.Quit(a.ctx)
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
@@ -121,7 +140,7 @@ func (a *App) onLog(level, message string) {
 	entry := LogEntry{
 		Level:     level,
 		Message:   message,
-		Timestamp: getCurrentTimestamp(),
+		Timestamp: 0,
 	}
 
 	a.logs = append([]LogEntry{entry}, a.logs...)
@@ -175,9 +194,4 @@ func (a *App) onClipboardReceived(payload protocol.ClipboardPayload) {
 	case protocol.DataTypeImage:
 		a.onLog("SUCCESS", "已接收并写入图片数据")
 	}
-}
-
-// getCurrentTimestamp 获取当前时间戳（毫秒）
-func getCurrentTimestamp() int64 {
-	return 0 // 将在前端使用 Date.now()
 }

@@ -12,20 +12,24 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
+	// 创建应用实例
 	app := NewApp()
 
-	// Create application with options
+	// 创建并运行应用
 	err := wails.Run(&options.App{
-		Title:  "NextPaste Server",
-		Width:  1200,
-		Height: 800,
+		Title:     "NextPaste Server",
+		Width:     1200,
+		Height:    800,
+		MinWidth:  900,
+		MinHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
+		BackgroundColour: &options.RGBA{R: 15, G: 15, B: 35, A: 1}, // 深色背景 #0f0f23
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
+		// 无边框窗口，使用自定义标题栏
+		Frameless: true,
 		Bind: []interface{}{
 			app,
 		},

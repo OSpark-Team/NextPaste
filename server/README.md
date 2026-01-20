@@ -1,6 +1,6 @@
 # NextPaste Server
 
-NextPaste 的 Windows 服务端应用，基于 Wails 框架开发，提供 WebSocket 服务器和剪贴板监听功能。
+NextPaste 的 PC 服务端应用，基于 Wails 框架开发，提供 WebSocket 服务器和剪贴板监听功能。
 
 ## 功能特性
 

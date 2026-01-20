@@ -33,7 +33,6 @@ export class ClipboardController {
   public init(context: common.UIAbilityContext): void {
     this.context = context;
     this.backgroundTaskManager.init(context);
-    this.viewModel.addLog(LogLevel.INFO, '应用启动');
   }
   
   /**
@@ -45,7 +44,25 @@ export class ClipboardController {
       if (connected) {
         this.viewModel.connectionStatus = ConnectionStatus.CONNECTED;
         this.viewModel.addLog(LogLevel.SUCCESS, '已连接到服务器');
+
+        // 启动后台任务
+        this.backgroundTaskManager.startBackgroundTask().then((started: boolean) => {
+          if (started) {
+            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
+          } else {
+            this.viewModel.addLog(LogLevel.ERROR, '启动后台任务失败')
+          }
+        });
       } else {
+        // 停止后台任务
+        this.backgroundTaskManager.stopBackgroundTask().then((started: boolean) => {
+          if (started) {
+            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已停止');
+          } else {
+            this.viewModel.addLog(LogLevel.ERROR, '停止后台任务失败')
+          }
+        });
+
         this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
         this.viewModel.addLog(LogLevel.WARNING, '已断开连接');
       }
@@ -72,15 +89,6 @@ export class ClipboardController {
       return false;
     }
     
-    // 启动后台任务
-    this.viewModel.addLog(LogLevel.INFO, '正在启动后台任务...');
-    const taskStarted = await this.backgroundTaskManager.startBackgroundTask();
-    if (!taskStarted) {
-      this.viewModel.addLog(LogLevel.ERROR, '启动后台任务失败');
-      return false;
-    }
-    this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
-    
     // 连接 WebSocket
     this.viewModel.connectionStatus = ConnectionStatus.CONNECTING;
     this.viewModel.addLog(LogLevel.INFO, '正在连接服务器...');
@@ -88,7 +96,6 @@ export class ClipboardController {
     const connected = await this.webSocketManager.connect(this.viewModel.serverAddress);
     if (!connected) {
       this.viewModel.addLog(LogLevel.ERROR, '连接服务器失败');
-      await this.backgroundTaskManager.stopBackgroundTask();
       this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
       return false;
     }
@@ -112,10 +119,6 @@ export class ClipboardController {
     
     // 断开 WebSocket
     await this.webSocketManager.disconnect();
-    
-    // 停止后台任务
-    await this.backgroundTaskManager.stopBackgroundTask();
-    this.viewModel.addLog(LogLevel.INFO, '后台任务已停止');
     
     this.viewModel.isRunning = false;
     this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;

@@ -18,6 +18,18 @@ export function GetServerStatus() {
   return window['go']['main']['App']['GetServerStatus']();
 }
 
+export function HideWindow() {
+  return window['go']['main']['App']['HideWindow']();
+}
+
+export function Quit() {
+  return window['go']['main']['App']['Quit']();
+}
+
+export function ShowWindow() {
+  return window['go']['main']['App']['ShowWindow']();
+}
+
 export function StartServer(arg1, arg2) {
   return window['go']['main']['App']['StartServer'](arg1, arg2);
 }
