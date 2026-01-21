@@ -26,9 +26,9 @@ export class WebSocketManager {
   private serverUrl: string = '';
   private isConnected: boolean = false;
   private heartbeatTimer: number = -1;
-  private heartbeatInterval: number = 5000; // 心跳间隔 5 秒
+  private heartbeatInterval: number = 15000; // 心跳间隔 15 秒
   private reconnectTimer: number = -1;
-  private reconnectInterval: number = 5000; // 重连间隔 5 秒
+  private reconnectInterval: number = 3000; // 重连间隔 3 秒
   private shouldReconnect: boolean = false;
   
   private connectionStatusCallback: ConnectionStatusCallback | null = null;

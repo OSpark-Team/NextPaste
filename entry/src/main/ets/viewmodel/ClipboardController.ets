@@ -2,7 +2,6 @@ import { common } from '@kit.AbilityKit';
 import { ClipboardViewModel } from './ClipboardViewModel';
 import { ClipboardMonitor, ClipboardData, ClipboardDataType } from '../services/ClipboardMonitor';
 import { WebSocketManager } from '../services/WebSocketManager';
-import { BackgroundTaskManager } from '../services/BackgroundTaskManager';
 import { DeviceMode, ConnectionStatus, LogLevel } from '../models/AppConfig';
 import { SyncMessage, SyncAction, DataType, ClipboardPayload } from '../protocol/ClipboardProtocol';
 
@@ -14,14 +13,12 @@ export class ClipboardController {
   private viewModel: ClipboardViewModel;
   private clipboardMonitor: ClipboardMonitor;
   private webSocketManager: WebSocketManager;
-  private backgroundTaskManager: BackgroundTaskManager;
   private context: common.UIAbilityContext | null = null;
   
   constructor(viewModel: ClipboardViewModel) {
     this.viewModel = viewModel;
     this.clipboardMonitor = new ClipboardMonitor();
     this.webSocketManager = new WebSocketManager();
-    this.backgroundTaskManager = new BackgroundTaskManager();
     
     this.setupWebSocketCallbacks();
   }
@@ -32,7 +29,6 @@ export class ClipboardController {
    */
   public init(context: common.UIAbilityContext): void {
     this.context = context;
-    this.backgroundTaskManager.init(context);
   }
   
   /**
@@ -44,25 +40,7 @@ export class ClipboardController {
       if (connected) {
         this.viewModel.connectionStatus = ConnectionStatus.CONNECTED;
         this.viewModel.addLog(LogLevel.SUCCESS, '已连接到服务器');
-
-        // 启动后台任务
-        this.backgroundTaskManager.startBackgroundTask().then((started: boolean) => {
-          if (started) {
-            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已启动');
-          } else {
-            this.viewModel.addLog(LogLevel.ERROR, '启动后台任务失败')
-          }
-        });
       } else {
-        // 停止后台任务
-        this.backgroundTaskManager.stopBackgroundTask().then((started: boolean) => {
-          if (started) {
-            this.viewModel.addLog(LogLevel.SUCCESS, '后台任务已停止');
-          } else {
-            this.viewModel.addLog(LogLevel.ERROR, '停止后台任务失败')
-          }
-        });
-
         this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
         this.viewModel.addLog(LogLevel.WARNING, '已断开连接');
       }
