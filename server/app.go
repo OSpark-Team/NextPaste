@@ -23,19 +23,23 @@ type LogEntry struct {
 type App struct {
 	ctx          context.Context
 	wsServer     *ws.Server
+	wsClient     *ws.WSClient
 	clipboardMon *clipboard.Monitor
 	logs         []LogEntry
 	logsMu       sync.RWMutex
 	maxLogs      int
+	mode         string // "server" 或 "client"
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
 		wsServer:     ws.NewServer(),
+		wsClient:     ws.NewWSClient("NextPaste Desktop", "Windows"),
 		clipboardMon: clipboard.NewMonitor(),
 		logs:         make([]LogEntry, 0),
 		maxLogs:      500,
+		mode:         "server", // 默认为服务器模式
 	}
 }
 
@@ -67,6 +71,7 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
 	a.StopServer()
+	a.DisconnectClient()
 }
 
 // StartServer 启动 WebSocket 服务器
@@ -96,16 +101,67 @@ func (a *App) StartServer(address string, port int) error {
 
 // StopServer 停止 WebSocket 服务器
 func (a *App) StopServer() error {
-	a.clipboardMon.Stop()
+	if a.mode == "server" {
+		a.clipboardMon.Stop()
+	}
 	return a.wsServer.Stop()
 }
 
+// ConnectClient 连接到远程 WebSocket 服务器（客户端模式）
+func (a *App) ConnectClient(url string) error {
+	if a.wsClient.IsConnected() {
+		return fmt.Errorf("客户端已连接")
+	}
+
+	a.mode = "client"
+
+	// 设置剪贴板数据接收回调
+	a.wsClient.SetClipboardCallback(a.onClipboardReceived)
+
+	// 设置连接成功回调 - 只有连接成功后才启动剪贴板监听
+	a.wsClient.SetOnConnected(func() {
+		a.onLog("INFO", "WebSocket 连接成功，启动剪贴板监听...")
+		err := a.clipboardMon.Start(a.onClipboardChangeClient)
+		if err != nil {
+			a.onLog("ERROR", fmt.Sprintf("启动剪贴板监听失败: %v", err))
+		} else {
+			a.onLog("SUCCESS", "剪贴板监听已启动")
+		}
+	})
+
+	// 连接到服务器（异步，会自动重连）
+	err := a.wsClient.Connect(url, a.onLog)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DisconnectClient 断开客户端连接
+func (a *App) DisconnectClient() error {
+	a.clipboardMon.Stop()
+	return a.wsClient.Disconnect()
+}
+
+// GetClientStatus 获取客户端状态
+func (a *App) GetClientStatus() map[string]any {
+	return map[string]any{
+		"isConnected": a.wsClient.IsConnected(),
+	}
+}
+
 // GetServerStatus 获取服务器状态
-func (a *App) GetServerStatus() map[string]interface{} {
-	return map[string]interface{}{
+func (a *App) GetServerStatus() map[string]any {
+	return map[string]any{
 		"isRunning":   a.wsServer.IsRunning(),
 		"clientCount": a.wsServer.GetClientCount(),
 	}
+}
+
+// GetMode 获取当前模式
+func (a *App) GetMode() string {
+	return a.mode
 }
 
 // GetLocalIPs 获取本机 IP 地址列表
@@ -152,7 +208,7 @@ func (a *App) onLog(level, message string) {
 	runtime.EventsEmit(a.ctx, "logs:updated", a.logs)
 }
 
-// onClipboardChange 剪贴板变化回调（本地剪贴板变化）
+// onClipboardChange 剪贴板变化回调（服务器模式）
 func (a *App) onClipboardChange(data clipboard.ClipboardData) {
 	var dataType string
 	switch data.Type {
@@ -170,6 +226,27 @@ func (a *App) onClipboardChange(data clipboard.ClipboardData) {
 	err := a.wsServer.BroadcastClipboard(dataType, data.Content)
 	if err != nil {
 		a.onLog("ERROR", fmt.Sprintf("广播剪贴板数据失败: %v", err))
+	}
+}
+
+// onClipboardChangeClient 剪贴板变化回调（客户端模式）
+func (a *App) onClipboardChangeClient(data clipboard.ClipboardData) {
+	var dataType string
+	switch data.Type {
+	case "text":
+		dataType = string(protocol.DataTypeText)
+		a.onLog("INFO", fmt.Sprintf("检测到剪贴板文本变化: %d 字符", len(data.Content)))
+	case "image":
+		dataType = string(protocol.DataTypeImage)
+		a.onLog("INFO", "检测到剪贴板图片变化")
+	default:
+		return
+	}
+
+	// 发送给服务器
+	err := a.wsClient.SendClipboard(dataType, data.Content)
+	if err != nil {
+		a.onLog("ERROR", fmt.Sprintf("发送剪贴板数据失败: %v", err))
 	}
 }
 

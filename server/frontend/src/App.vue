@@ -1,27 +1,55 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { EventsOn, EventsOff, WindowMinimise } from '../wailsjs/runtime/runtime'
-import { StartServer, StopServer, GetServerStatus, GetLogs, ClearLogs, Quit } from '../wailsjs/go/main/App'
+import { StartServer, StopServer, GetServerStatus, GetLogs, ClearLogs, Quit, ConnectClient, DisconnectClient, GetClientStatus } from '../wailsjs/go/main/App'
 import ServerConfig from './components/ServerConfig.vue'
+import ClientConfig from './components/ClientConfig.vue'
 import ConnectionInfo from './components/ConnectionInfo.vue'
 import LogViewer from './components/LogViewer.vue'
 import StatusIndicator from './components/StatusIndicator.vue'
 import type { ServerConfig as ServerConfigType, ServerStatus, LogEntry } from './types'
 
+type Mode = 'server' | 'client'
+
+// 模式
+const mode = ref<Mode>('server')
+
+// 服务器配置
 const config = ref<ServerConfigType>({
   address: '0.0.0.0',
   port: 8080
 })
+
+// 客户端配置
+const clientUrl = ref('ws://localhost:8080/ws/my-room')
 
 const status = ref<ServerStatus>({
   isRunning: false,
   clientCount: 0
 })
 
+// 客户端状态
+const clientStatus = ref({
+  isConnected: false,
+  serverUrl: ''
+})
+
 const logs = ref<LogEntry[]>([])
+
+// 计算当前是否有活动连接
+const hasActiveConnection = computed(() => {
+  return mode.value === 'server' ? status.value.isRunning : clientStatus.value.isConnected
+})
 
 // 加载配置
 const loadConfig = () => {
+  // 加载模式
+  const savedMode = localStorage.getItem('mode')
+  if (savedMode === 'server' || savedMode === 'client') {
+    mode.value = savedMode
+  }
+
+  // 加载服务器配置
   const saved = localStorage.getItem('serverConfig')
   if (saved) {
     try {
@@ -30,11 +58,35 @@ const loadConfig = () => {
       console.error('加载配置失败:', e)
     }
   }
+
+  // 加载客户端配置
+  const savedClientUrl = localStorage.getItem('clientUrl')
+  if (savedClientUrl) {
+    clientUrl.value = savedClientUrl
+  }
 }
 
 // 保存配置
 const saveConfig = () => {
   localStorage.setItem('serverConfig', JSON.stringify(config.value))
+}
+
+const saveClientUrl = () => {
+  localStorage.setItem('clientUrl', clientUrl.value)
+}
+
+const saveMode = () => {
+  localStorage.setItem('mode', mode.value)
+}
+
+// 切换模式
+const switchMode = (newMode: Mode) => {
+  if (hasActiveConnection.value) {
+    alert('请先停止当前连接')
+    return
+  }
+  mode.value = newMode
+  saveMode()
 }
 
 // 启动服务器
@@ -91,6 +143,40 @@ const handleClearLogs = async () => {
   }
 }
 
+// 客户端连接
+const handleConnect = async (url: string) => {
+  try {
+    await ConnectClient(url)
+    clientUrl.value = url
+    saveClientUrl()
+    await updateClientStatus()
+  } catch (error) {
+    console.error('连接失败:', error)
+    alert(`连接失败: ${error}`)
+  }
+}
+
+// 客户端断开
+const handleDisconnect = async () => {
+  try {
+    await DisconnectClient()
+    await updateClientStatus()
+  } catch (error) {
+    console.error('断开失败:', error)
+    alert(`断开失败: ${error}`)
+  }
+}
+
+// 更新客户端状态
+const updateClientStatus = async () => {
+  try {
+    const newStatus = await GetClientStatus()
+    clientStatus.value = newStatus as any
+  } catch (error) {
+    console.error('获取客户端状态失败:', error)
+  }
+}
+
 // 监听日志更新事件
 const onLogsUpdated = (newLogs: LogEntry[]) => {
   logs.value = newLogs
@@ -108,13 +194,17 @@ const handleQuit = async () => {
 onMounted(() => {
   loadConfig()
   updateStatus()
+  updateClientStatus()
   loadLogs()
 
   // 订阅日志更新事件
   EventsOn('logs:updated', onLogsUpdated)
 
   // 定时更新状态
-  const statusInterval = setInterval(updateStatus, 2000)
+  const statusInterval = setInterval(() => {
+    updateStatus()
+    updateClientStatus()
+  }, 2000)
 
   onUnmounted(() => {
     clearInterval(statusInterval)
@@ -165,7 +255,37 @@ onMounted(() => {
 
     <main class="app-main">
       <div class="left-panel">
+        <!-- 模式切换 -->
+        <div class="mode-switcher glass-card">
+          <div class="mode-tabs">
+            <button
+              :class="['mode-tab', { active: mode === 'server' }]"
+              @click="switchMode('server')"
+              :disabled="hasActiveConnection"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              服务器模式
+            </button>
+            <button
+              :class="['mode-tab', { active: mode === 'client' }]"
+              @click="switchMode('client')"
+              :disabled="hasActiveConnection"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+              </svg>
+              客户端模式
+            </button>
+          </div>
+        </div>
+
+        <!-- 服务器配置 -->
         <ServerConfig
+          v-if="mode === 'server'"
           :config="config"
           :is-running="status.isRunning"
           @start="handleStart"
@@ -173,7 +293,19 @@ onMounted(() => {
           @update:config="saveConfig"
         />
 
+        <!-- 客户端配置 -->
+        <ClientConfig
+          v-if="mode === 'client'"
+          :url="clientUrl"
+          :is-connected="clientStatus.isConnected"
+          @connect="handleConnect"
+          @disconnect="handleDisconnect"
+          @update:url="saveClientUrl"
+        />
+
+        <!-- 连接信息（仅服务器模式显示） -->
         <ConnectionInfo
+          v-if="mode === 'server'"
           :is-running="status.isRunning"
           :client-count="status.clientCount"
           :port="config.port"
@@ -321,5 +453,53 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 模式切换器 */
+.mode-switcher {
+  padding: var(--spacing-md);
+  animation: fadeIn 0.4s ease;
+}
+
+.mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+  background: var(--surface-dark);
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.mode-tab {
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  transition: all var(--transition-normal);
+  position: relative;
+}
+
+.mode-tab:hover:not(:disabled):not(.active) {
+  background: var(--surface-glass);
+  color: var(--text-primary);
+}
+
+.mode-tab.active {
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  color: white;
+  box-shadow: 0 2px 8px var(--color-primary-glow);
+}
+
+.mode-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

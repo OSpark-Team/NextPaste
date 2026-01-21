@@ -17,8 +17,8 @@ export class BackgroundTaskManager {
   private currentProgress: number = 0; // 当前进度值
 
   // 更新间隔配置（毫秒）
-  private readonly MIN_UPDATE_INTERVAL: number = 500; // 最小 0.5 秒
-  private readonly MAX_UPDATE_INTERVAL: number = 6000; // 最大 6 秒
+  private readonly MIN_UPDATE_INTERVAL: number = 15000; // 最小 15 秒
+  private readonly MAX_UPDATE_INTERVAL: number = 60000; // 最大 60 秒
 
   /**
    * 初始化
