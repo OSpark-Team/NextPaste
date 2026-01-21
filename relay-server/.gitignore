@@ -1,0 +1,20 @@
+# 编译输出
+nextpaste-relay
+nextpaste-relay.exe
+*.exe
+*.out
+
+# Go 依赖
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+

@@ -6,12 +6,28 @@ export function ClearLogs() {
   return window['go']['main']['App']['ClearLogs']();
 }
 
+export function ConnectClient(arg1) {
+  return window['go']['main']['App']['ConnectClient'](arg1);
+}
+
+export function DisconnectClient() {
+  return window['go']['main']['App']['DisconnectClient']();
+}
+
+export function GetClientStatus() {
+  return window['go']['main']['App']['GetClientStatus']();
+}
+
 export function GetLocalIPs() {
   return window['go']['main']['App']['GetLocalIPs']();
 }
 
 export function GetLogs() {
   return window['go']['main']['App']['GetLogs']();
+}
+
+export function GetMode() {
+  return window['go']['main']['App']['GetMode']();
 }
 
 export function GetServerStatus() {
