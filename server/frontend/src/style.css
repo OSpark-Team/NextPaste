@@ -1,6 +1,6 @@
 /* ============================================
    NextPaste Server - 全局样式系统
-   深色玻璃拟态风格（Dark Glassmorphism）
+   简洁白色风格（Clean Light Theme）
    ============================================ */
 
 /* Google Fonts 导入 */
@@ -11,38 +11,43 @@
    ============================================ */
 :root {
   /* 主色调 */
-  --color-primary: #6366f1;
-  --color-primary-hover: #818cf8;
-  --color-primary-glow: rgba(99, 102, 241, 0.4);
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-glow: rgba(59, 130, 246, 0.15);
+
+  /* 客户端模式蓝色主题 */
+  --color-client: #3b82f6;
+  --color-client-hover: #2563eb;
+  --color-client-glow: rgba(59, 130, 246, 0.15);
 
   /* 语义色 */
-  --color-success: #10b981;
-  --color-success-glow: rgba(16, 185, 129, 0.4);
+  --color-success: #22c55e;
+  --color-success-glow: rgba(34, 197, 94, 0.15);
   --color-warning: #f59e0b;
-  --color-warning-glow: rgba(245, 158, 11, 0.4);
+  --color-warning-glow: rgba(245, 158, 11, 0.15);
   --color-error: #ef4444;
-  --color-error-glow: rgba(239, 68, 68, 0.4);
+  --color-error-glow: rgba(239, 68, 68, 0.15);
 
   /* 背景与表面 */
-  --bg-gradient-start: #0f0f23;
-  --bg-gradient-end: #1a1a2e;
-  --surface-glass: rgba(255, 255, 255, 0.05);
-  --surface-glass-hover: rgba(255, 255, 255, 0.08);
-  --surface-dark: rgba(0, 0, 0, 0.2);
+  --bg-gradient-start: #f8fafc;
+  --bg-gradient-end: #f1f5f9;
+  --surface-glass: #ffffff;
+  --surface-glass-hover: #f8fafc;
+  --surface-dark: #f1f5f9;
 
   /* 边框 */
-  --border-glass: rgba(255, 255, 255, 0.1);
-  --border-light: rgba(255, 255, 255, 0.15);
+  --border-glass: #e2e8f0;
+  --border-light: #cbd5e1;
 
   /* 文字 */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
 
   /* 阴影 */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   --shadow-glow: 0 0 20px var(--color-primary-glow);
 
   /* 间距 */
@@ -73,7 +78,8 @@
   padding: 0;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
@@ -91,7 +97,7 @@ html, body {
 }
 
 /* ============================================
-   深色主题滚动条
+   滚动条样式
    ============================================ */
 ::-webkit-scrollbar {
   width: 8px;
@@ -104,13 +110,13 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: #cbd5e1;
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #94a3b8;
 }
 
 /* ============================================
@@ -119,24 +125,30 @@ html, body {
 
 /* 呼吸灯动画 - 运行状态 */
 @keyframes breathe {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 8px var(--color-success-glow),
-                0 0 16px var(--color-success-glow);
+      0 0 16px var(--color-success-glow);
     opacity: 1;
   }
+
   50% {
     box-shadow: 0 0 16px var(--color-success-glow),
-                0 0 32px var(--color-success-glow);
+      0 0 32px var(--color-success-glow);
     opacity: 0.8;
   }
 }
 
 /* 脉冲动画 - 停止状态 */
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
+
   50% {
     transform: scale(1.1);
     opacity: 0.7;
@@ -149,6 +161,7 @@ html, body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -161,6 +174,7 @@ html, body {
     opacity: 0;
     transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -172,6 +186,7 @@ html, body {
   0% {
     background-color: rgba(99, 102, 241, 0.2);
   }
+
   100% {
     background-color: transparent;
   }
@@ -182,6 +197,7 @@ html, body {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -192,9 +208,11 @@ html, body {
   0% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0% 50%;
   }
@@ -205,11 +223,10 @@ html, body {
    ============================================ */
 .glass-card {
   background: var(--surface-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
 }
 
 .glass-card:hover {

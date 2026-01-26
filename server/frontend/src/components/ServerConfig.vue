@@ -188,8 +188,9 @@ const handleStop = () => {
 }
 
 .input-field:disabled {
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--text-muted);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
   cursor: not-allowed;
 }
 

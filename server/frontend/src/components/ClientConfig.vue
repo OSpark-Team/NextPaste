@@ -112,7 +112,7 @@ const handleDisconnect = () => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, var(--color-client) 0%, var(--color-client-hover) 100%);
   border-radius: var(--radius-md);
   color: white;
 }
@@ -165,13 +165,14 @@ const handleDisconnect = () => {
 }
 
 .input-field:focus {
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  border-color: var(--color-client);
+  box-shadow: 0 0 0 3px var(--color-client-glow);
 }
 
 .input-field:disabled {
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--text-muted);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
   cursor: not-allowed;
 }
 
@@ -185,7 +186,7 @@ const handleDisconnect = () => {
   position: absolute;
   inset: -1px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, var(--color-client), var(--color-client-hover));
   opacity: 0;
   z-index: -1;
   transition: opacity var(--transition-normal);
@@ -236,14 +237,14 @@ const handleDisconnect = () => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, var(--color-client) 0%, var(--color-client-hover) 100%);
   color: white;
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 16px var(--color-client-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 24px var(--color-client-glow);
 }
 
 .btn-primary:active:not(:disabled) {
