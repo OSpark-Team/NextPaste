@@ -251,6 +251,22 @@
     {
       "name": "log_browser_start_failed",
       "value": "Startup failed"
+    },
+    {
+      "name": "image_send_title",
+      "value": "Send Image"
+    },
+    {
+      "name": "image_send_desc_ready",
+      "value": "Tap to select and send image to other devices"
+    },
+    {
+      "name": "image_send_desc_not_ready",
+      "value": "Please start sync first"
+    },
+    {
+      "name": "toast_please_start_sync_first",
+      "value": "Please start sync first"
     }
   ]
 }

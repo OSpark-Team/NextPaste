@@ -251,6 +251,22 @@
     {
       "name": "log_browser_start_failed",
       "value": "启动失败"
+    },
+    {
+      "name": "image_send_title",
+      "value": "发送图片"
+    },
+    {
+      "name": "image_send_desc_ready",
+      "value": "点击选择图片发送到其他设备"
+    },
+    {
+      "name": "image_send_desc_not_ready",
+      "value": "请先开始同步"
+    },
+    {
+      "name": "toast_please_start_sync_first",
+      "value": "请先开始同步"
     }
   ]
 }

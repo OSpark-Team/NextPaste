@@ -8,6 +8,11 @@ import { LogItem } from '../components/LogItem';
 import { DeviceMode, LogLevel, LogEntry } from '../models/AppConfig';
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import Want from '@ohos.app.ability.Want';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { image } from '@kit.ImageKit';
+import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 /**
  * 主页面
@@ -168,6 +173,102 @@ import Want from '@ohos.app.ability.Want';
   }
 
   /**
+   * 选择并发送图片
+   */
+  private async selectAndSendImage(): Promise<void> {
+    try {
+      // 选择图片
+      const photoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
+      photoSelectOptions.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      photoSelectOptions.maxSelectNumber = 1;
+
+      const photoViewPicker = new photoAccessHelper.PhotoViewPicker();
+      const photoSelectResult = await photoViewPicker.select(photoSelectOptions);
+
+      if (photoSelectResult.photoUris.length === 0) {
+        return;
+      }
+
+      const uri = photoSelectResult.photoUris[0];
+
+      // 读取图片文件
+      const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const stat = fileIo.statSync(file.fd);
+      const fileSize = stat.size;
+
+      const fileSizeKB = fileSize / 1024;
+      const fileSizeMB = fileSizeKB / 1024;
+
+      // 检查文件大小限制（3.5MB）
+      const SIZE_LIMIT = 3.5 * 1024 * 1024; // 3.5MB
+      if (fileSize > SIZE_LIMIT) {
+        fileIo.closeSync(file);
+        this.viewModel.addLog(LogLevel.ERROR, `图片过大 (${fileSizeMB.toFixed(2)} MB)，当前版本不支持超过 3.5MB 的图片`);
+        this.getUIContext()?.getPromptAction().showToast({
+          message: `图片过大 (${fileSizeMB.toFixed(2)} MB)\n当前版本不支持超过 3.5MB 的图片`,
+          duration: 3000
+        });
+        return;
+      }
+
+      // 创建 ImageSource 并转换为 PixelMap
+      const imageSourceApi = image.createImageSource(file.fd);
+      const pixelMap = await imageSourceApi.createPixelMap();
+      fileIo.closeSync(file);
+
+      // 转换为 Base64（PNG 格式，quality 100）
+      this.viewModel.addLog(LogLevel.INFO, '正在编码图片...');
+      const base64 = await this.encodeImageToBase64(pixelMap);
+
+      // 发送图片
+      const sent = await this.controller.getWebSocketManager().sendImage(base64);
+      if (sent) {
+        this.viewModel.addLog(LogLevel.SUCCESS, '图片发送成功');
+        this.getUIContext()?.getPromptAction().showToast({
+          message: '图片发送成功',
+          duration: 1500
+        });
+      } else {
+        this.viewModel.addLog(LogLevel.ERROR, '图片发送失败');
+        this.getUIContext()?.getPromptAction().showToast({
+          message: '图片发送失败，请检查连接状态',
+          duration: 2000
+        });
+      }
+
+    } catch (err) {
+      const error = err as BusinessError;
+      this.viewModel.addLog(LogLevel.ERROR, `选择图片失败: ${error.message}`);
+      this.getUIContext()?.getPromptAction().showToast({
+        message: '选择图片失败',
+        duration: 1500
+      });
+    }
+  }
+
+  /**
+   * 编码图片为 Base64
+   * @param pixelMap PixelMap 对象
+   * @returns Base64 字符串
+   */
+  private async encodeImageToBase64(pixelMap: image.PixelMap): Promise<string> {
+    const imagePackerApi = image.createImagePacker();
+    const packOpts: image.PackingOption = {
+      format: 'image/png',
+      quality: 100
+    };
+
+    const arrayBuffer = await imagePackerApi.packToData(pixelMap, packOpts);
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // 使用 util.Base64Helper 进行 Base64 编码
+    const base64Helper = new util.Base64Helper();
+    const base64 = base64Helper.encodeToStringSync(uint8Array);
+
+    return base64;
+  }
+
+  /**
    * 获取过滤后的日志
    */
   private getFilteredLogs(): LogEntry[] {
@@ -188,8 +289,9 @@ import Want from '@ohos.app.ability.Want';
         Row({ space: 8 }) {
           // 左侧：设置区域
           Scroll() {
-            Column() {
+            Column({ space: 8 }) {
               this.buildSettingsSection()
+              this.buildImageSendSection()
             }
             .width('100%')
               .alignItems(HorizontalAlign.Start)
@@ -215,6 +317,9 @@ import Want from '@ohos.app.ability.Want';
           Column() {
             // 可折叠设置区域
             this.buildSettingsSection()
+
+            // 图片发送区域
+            this.buildImageSendSection()
 
             // 日志区域
             this.buildLogsSection()
@@ -357,6 +462,59 @@ import Want from '@ohos.app.ability.Want';
       .backgroundColor($r('app.color.background_secondary'))
       .borderRadius(12)
       .margin(this.isHorizontalLayout ? { right: 8 } : { top: 16 })
+  }
+
+  /**
+   * 构建图片发送区域
+   */
+  @Builder
+  buildImageSendSection() {
+    Column() {
+      Row({ space: 12 }) {
+        // 图标
+        SymbolGlyph($r('sys.symbol.camera'))
+          .fontSize(24)
+          .fontColor([$r('app.color.primary_color')])
+
+        // 文本
+        Column({ space: 4 }) {
+          Text($r('app.string.image_send_title'))
+            .fontSize(16)
+            .fontColor($r('app.color.text_primary'))
+            .fontWeight(FontWeight.Medium)
+
+          Text(this.viewModel.isRunning ?
+            $r('app.string.image_send_desc_ready') :
+            $r('app.string.image_send_desc_not_ready'))
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        // 箭头图标
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(18)
+          .fontColor([$r('app.color.text_tertiary')])
+      }
+      .width('100%')
+      .padding(16)
+      .onClick(() => {
+        if (this.viewModel.isRunning) {
+          this.selectAndSendImage();
+        } else {
+          this.getUIContext()?.getPromptAction().showToast({
+            message: $r('app.string.toast_please_start_sync_first'),
+            duration: 1500
+          });
+        }
+      })
+    }
+    .width('100%')
+    .backgroundColor($r('app.color.background_secondary'))
+    .borderRadius(12)
+    .margin({ top: 8 })
+    .opacity(this.viewModel.isRunning ? 1 : 0.6)
   }
 
   /**
