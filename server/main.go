@@ -25,7 +25,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 15, G: 15, B: 35, A: 1}, // 深色背景 #0f0f23
+		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 1}, // 浅色背景 #f8fafc
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		// 无边框窗口，使用自定义标题栏

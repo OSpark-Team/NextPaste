@@ -236,7 +236,7 @@ onMounted(() => {
           <h1 class="app-title">NextPaste Server</h1>
         </div>
         <div class="header-right">
-          <StatusIndicator :is-running="status.isRunning" />
+          <StatusIndicator :is-running="hasActiveConnection" />
           <div class="window-controls">
             <button class="control-btn minimize-btn" @click="handleMinimize" title="最小化">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">

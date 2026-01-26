@@ -180,6 +180,13 @@ export class ClipboardController {
   }
 
   /**
+   * 获取 WebSocketManager 实例（用于主动发送图片等操作）
+   */
+  public getWebSocketManager(): WebSocketManager {
+    return this.webSocketManager;
+  }
+
+  /**
    * 清理资源
    */
   public async cleanup(): Promise<void> {
