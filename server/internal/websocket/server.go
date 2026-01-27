@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -35,10 +37,12 @@ type Client struct {
 // LogCallback 日志回调函数
 type LogCallback func(level, message string)
 
-// ClipboardCallback 剪贴板数据回调函数
-type ClipboardCallback func(payload protocol.ClipboardPayload)
+// BinaryClipboardCallback 剪贴板数据回调函数（V1.1 二进制协议）
+// dataType: "text" 或 "image"
+// content: 文本字符串或图片二进制数据（不再是 Base64）
+type BinaryClipboardCallback func(dataType string, content []byte)
 
-// Server WebSocket 服务器
+// Server WebSocket 服务器（V1.1 二进制协议版本）
 type Server struct {
 	address           string
 	port              int
@@ -48,21 +52,23 @@ type Server struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	isRunning         bool
-	serverID          string
 	logCb             LogCallback
-	clipboardCallback ClipboardCallback
+	clipboardCallback BinaryClipboardCallback
+
+	// V1.1 二进制协议管理器
+	protocolMgr *protocol.BinaryProtocolManager
 }
 
 // NewServer 创建 WebSocket 服务器
 func NewServer() *Server {
 	return &Server{
-		clients:  make(map[string]*Client),
-		serverID: uuid.New().String(),
+		clients:     make(map[string]*Client),
+		protocolMgr: protocol.NewBinaryProtocolManager(),
 	}
 }
 
-// SetClipboardCallback 设置剪贴板数据回调
-func (s *Server) SetClipboardCallback(cb ClipboardCallback) {
+// SetClipboardCallback 设置剪贴板数据回调（V1.1）
+func (s *Server) SetClipboardCallback(cb BinaryClipboardCallback) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.clipboardCallback = cb
@@ -93,7 +99,7 @@ func (s *Server) Start(address string, port int, logCb LogCallback) error {
 	s.isRunning = true
 
 	go func() {
-		s.log("INFO", fmt.Sprintf("WebSocket 服务器启动在 %s:%d", address, port))
+		s.log("INFO", fmt.Sprintf("WebSocket 服务器启动在 %s:%d (V1.1 二进制协议)", address, port))
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.log("ERROR", fmt.Sprintf("服务器错误: %v", err))
 		}
@@ -161,7 +167,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go s.writePump(client)
 }
 
-// readPump 读取客户端消息
+// readPump 读取客户端消息（V1.1 二进制协议）
 func (s *Server) readPump(client *Client) {
 	defer func() {
 		s.removeClient(client)
@@ -175,7 +181,7 @@ func (s *Server) readPump(client *Client) {
 	})
 
 	for {
-		_, message, err := client.Conn.ReadMessage()
+		messageType, message, err := client.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				s.log("ERROR", fmt.Sprintf("客户端 %s 异常断开: %v", client.ID, err))
@@ -183,11 +189,17 @@ func (s *Server) readPump(client *Client) {
 			break
 		}
 
-		s.handleMessage(client, message)
+		// V1.1 二进制协议：只处理二进制消息
+		if messageType != websocket.BinaryMessage {
+			s.log("WARNING", "收到非二进制消息，不兼容的协议版本")
+			continue
+		}
+
+		s.handleBinaryMessage(client, message)
 	}
 }
 
-// writePump 向客户端发送消息
+// writePump 向客户端发送消息（V1.1 二进制协议）
 func (s *Server) writePump(client *Client) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
@@ -204,7 +216,8 @@ func (s *Server) writePump(client *Client) {
 				return
 			}
 
-			if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
+			// V1.1: 使用二进制帧发送
+			if err := client.Conn.WriteMessage(websocket.BinaryMessage, message); err != nil {
 				return
 			}
 
@@ -217,80 +230,109 @@ func (s *Server) writePump(client *Client) {
 	}
 }
 
-// handleMessage 处理客户端消息
-func (s *Server) handleMessage(client *Client, data []byte) {
-	msg, err := protocol.ParseMessage(data)
+// handleBinaryMessage 处理二进制消息（V1.1）
+func (s *Server) handleBinaryMessage(client *Client, data []byte) {
+	msg, err := s.protocolMgr.Parse(data)
 	if err != nil {
-		s.log("ERROR", fmt.Sprintf("解析消息失败: %v", err))
+		// 回环消息静默忽略
+		if errors.Is(err, protocol.ErrLoopbackDetected) {
+			return
+		}
+		s.log("ERROR", fmt.Sprintf("解析二进制消息失败: %v", err))
 		return
 	}
 
-	// 忽略来自服务器自己的消息
-	if msg.SenderID == s.serverID {
-		return
-	}
-
-	switch msg.Action {
-	case protocol.ActionHandshake:
-		s.handleHandshake(client, msg)
-	case protocol.ActionClipboardSync:
-		s.handleClipboardSync(client, msg)
-	case protocol.ActionHeartbeat:
-		s.handleHeartbeat(client, msg)
+	switch msg.Type {
+	case protocol.TypeHandshake:
+		s.handleBinaryHandshake(client, msg)
+	case protocol.TypeText:
+		s.handleBinaryText(client, msg)
+	case protocol.TypeImage:
+		s.handleBinaryImage(client, msg)
+	case protocol.TypeHeartbeat:
+		// 心跳消息只需重置读取超时，无需特殊处理
 	default:
-		s.log("WARNING", fmt.Sprintf("未知的消息类型: %s", msg.Action))
+		s.log("WARNING", fmt.Sprintf("未知的消息类型: 0x%02X", msg.Type))
 	}
 }
 
-// handleHandshake 处理握手消息
-func (s *Server) handleHandshake(client *Client, msg *protocol.SyncMessage) {
-	payload, err := protocol.ParseHandshakePayload(msg.Data)
+// handleBinaryHandshake 处理握手消息（V1.1）
+func (s *Server) handleBinaryHandshake(client *Client, msg *protocol.BinaryMessage) {
+	meta, err := msg.GetHandshakeMeta()
 	if err != nil {
 		s.log("ERROR", fmt.Sprintf("解析握手消息失败: %v", err))
 		return
 	}
 
 	client.mu.Lock()
-	client.DeviceName = payload.DeviceName
-	client.Platform = payload.Platform
+	client.DeviceName = meta.Name
+	client.Platform = meta.OS
 	client.mu.Unlock()
 
-	s.log("SUCCESS", fmt.Sprintf("客户端握手成功: %s (%s)", payload.DeviceName, payload.Platform))
+	s.log("SUCCESS", fmt.Sprintf("客户端握手成功: %s (%s) [协议 V1.%d]", meta.Name, meta.OS, meta.Ver%10))
 }
 
-// handleClipboardSync 处理剪贴板同步消息
-func (s *Server) handleClipboardSync(client *Client, msg *protocol.SyncMessage) {
-	payload, err := protocol.ParseClipboardPayload(msg.Data)
-	if err != nil {
-		s.log("ERROR", fmt.Sprintf("解析剪贴板消息失败: %v", err))
-		return
-	}
+// handleBinaryText 处理文本消息（V1.1）
+func (s *Server) handleBinaryText(client *Client, msg *protocol.BinaryMessage) {
+	text := msg.GetTextContent()
 
 	client.mu.RLock()
 	deviceName := client.DeviceName
 	client.mu.RUnlock()
 
-	s.log("INFO", fmt.Sprintf("收到剪贴板数据 [%s] 来自 %s", payload.Type, deviceName))
+	s.log("INFO", fmt.Sprintf("收到文本数据 [%d 字符] 来自 %s", len(text), deviceName))
 
 	// 调用回调函数（通知 App 层写入本地剪贴板）
 	if s.clipboardCallback != nil {
-		s.clipboardCallback(*payload)
+		s.clipboardCallback("text", []byte(text))
 	}
 
 	// 广播给其他客户端
-	s.broadcast(msg, client.ID)
+	s.broadcastBinary(msg, client.ID)
 }
 
-// handleHeartbeat 处理心跳消息
-func (s *Server) handleHeartbeat(client *Client, msg *protocol.SyncMessage) {
-	// 心跳消息不需要特殊处理，只需要重置读取超时
+// handleBinaryImage 处理图片消息（V1.1）
+func (s *Server) handleBinaryImage(client *Client, msg *protocol.BinaryMessage) {
+	imageData := msg.GetImageData()
+
+	client.mu.RLock()
+	deviceName := client.DeviceName
+	client.mu.RUnlock()
+
+	sizeMB := float64(len(imageData)) / 1024 / 1024
+	s.log("INFO", fmt.Sprintf("收到图片数据 [%.2f MB] 来自 %s", sizeMB, deviceName))
+
+	// 调用回调函数（通知 App 层写入本地剪贴板）
+	if s.clipboardCallback != nil {
+		s.clipboardCallback("image", imageData)
+	}
+
+	// 广播给其他客户端
+	s.broadcastBinary(msg, client.ID)
 }
 
-// broadcast 广播消息给所有客户端（除了发送者）
-func (s *Server) broadcast(msg *protocol.SyncMessage, excludeID string) {
-	data, err := msg.ToJSON()
+// broadcastBinary 广播二进制消息给所有客户端（除了发送者）
+func (s *Server) broadcastBinary(msg *protocol.BinaryMessage, excludeID string) {
+	// 重新封装消息以使用服务器的 UUID
+	var data []byte
+	var err error
+
+	switch msg.Type {
+	case protocol.TypeText:
+		data, err = s.protocolMgr.CreateText(msg.GetTextContent())
+	case protocol.TypeImage:
+		imageData := msg.GetImageData()
+		mime := "image/png"
+		if msg.Meta != nil && msg.Meta.Mime != "" {
+			mime = msg.Meta.Mime
+		}
+		data, err = s.protocolMgr.CreateImageFrame(imageData, mime)
+	default:
+		return
+	}
+
 	if err != nil {
-		s.log("ERROR", fmt.Sprintf("序列化消息失败: %v", err))
+		s.log("ERROR", fmt.Sprintf("封装广播消息失败: %v", err))
 		return
 	}
 
@@ -308,23 +350,24 @@ func (s *Server) broadcast(msg *protocol.SyncMessage, excludeID string) {
 	}
 }
 
-// BroadcastClipboard 广播剪贴板数据
-func (s *Server) BroadcastClipboard(dataType, content string) error {
-
+// BroadcastClipboardBinary 广播剪贴板数据（V1.1 二进制协议）
+// dataType: "text" 或 "image"
+// content: 对于文本是字符串字节，对于图片是原始二进制数据
+func (s *Server) BroadcastClipboardBinary(dataType string, content []byte) error {
 	s.log("INFO", fmt.Sprintf("广播剪贴板数据: %s", dataType))
 
-	payload := protocol.ClipboardPayload{
-		Type:     protocol.DataType(dataType),
-		MimeType: getMimeType(dataType),
-		Content:  content,
+	var data []byte
+	var err error
+
+	switch dataType {
+	case "text":
+		data, err = s.protocolMgr.CreateText(string(content))
+	case "image":
+		data, err = s.protocolMgr.CreateImageFrame(content, "image/png")
+	default:
+		return fmt.Errorf("不支持的数据类型: %s", dataType)
 	}
 
-	msg, err := protocol.CreateMessage(protocol.ActionClipboardSync, s.serverID, payload)
-	if err != nil {
-		return err
-	}
-
-	data, err := msg.ToJSON()
 	if err != nil {
 		return err
 	}
@@ -341,6 +384,24 @@ func (s *Server) BroadcastClipboard(dataType, content string) error {
 	}
 
 	return nil
+}
+
+// BroadcastClipboard 广播剪贴板数据（兼容旧接口，内部将 Base64 转为二进制）
+// 注意：此方法保留用于兼容，推荐使用 BroadcastClipboardBinary
+func (s *Server) BroadcastClipboard(dataType, content string) error {
+	switch dataType {
+	case "text":
+		return s.BroadcastClipboardBinary("text", []byte(content))
+	case "image":
+		// content 是 Base64 编码的图片，需要解码
+		imageData, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return fmt.Errorf("Base64 解码失败: %w", err)
+		}
+		return s.BroadcastClipboardBinary("image", imageData)
+	default:
+		return fmt.Errorf("不支持的数据类型: %s", dataType)
+	}
 }
 
 // removeClient 移除客户端
@@ -435,17 +496,5 @@ func (s *Server) log(level, message string) {
 		s.logCb(level, message)
 	} else {
 		log.Printf("[%s] %s", level, message)
-	}
-}
-
-// getMimeType 根据数据类型获取 MIME 类型
-func getMimeType(dataType string) string {
-	switch dataType {
-	case "text":
-		return "text/plain"
-	case "image":
-		return "image/png"
-	default:
-		return "application/octet-stream"
 	}
 }
