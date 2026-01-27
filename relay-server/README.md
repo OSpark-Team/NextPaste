@@ -4,10 +4,12 @@
 
 ## 功能特性
 
-- ✅ **房间隔离**：通过 roomID 实现多个独立的剪贴板共享空间
+- ✅ **房间隔离**：通过 roomID 实现多个独立的剪贴板共享空间 (V1 与 V2 物理隔离)
 - ✅ **纯转发**：不处理剪贴板，只负责消息转发
 - ✅ **无限房间**：支持无限数量的房间，自动创建和清理
-- ✅ **协议兼容**：完全兼容 NextPaste 协议（HANDSHAKE、CLIPBOARD_SYNC、HEARTBEAT）
+- ✅ **多协议支持**：
+  - **V1 (Legacy)**: 支持 JSON 协议 (`/ws/{roomID}`)
+  - **V2 (Recommended)**: 支持二进制协议 V1.1 (`/v2/ws/{roomID}`)
 - ✅ **自动清理**：房间为空时自动删除
 - ✅ **并发安全**：支持高并发连接
 
@@ -72,16 +74,20 @@ go run .
 
 ### 客户端连接
 
-**连接格式**：
+**V2 连接 (V1.1 二进制协议 - 推荐)**：
+```
+ws://<host>:<port>/v2/ws/<roomID>
+```
+
+**V1 连接 (V1.0 JSON协议 - 兼容)**：
 ```
 ws://<host>:<port>/ws/<roomID>
 ```
 
 **示例**：
 ```
-ws://localhost:8080/ws/my-room-123
-ws://example.com:8080/ws/team-workspace
-ws://192.168.1.100:8080/ws/家庭设备
+ws://localhost:8080/v2/ws/my-room-123      (V2)
+ws://example.com:8080/ws/team-workspace    (V1)
 ```
 
 ### 在 NextPaste 客户端中使用
@@ -101,22 +107,27 @@ ws://192.168.1.100:8080/ws/家庭设备
 
 - 每个 `roomID` 是一个独立的剪贴板共享空间
 - 同一个 `roomID` 内的所有客户端可以互相共享剪贴板
-- 不同 `roomID` 之间完全隔离，互不影响
+- **版本隔离**：V1 接口 (`/ws/`) 和 V2 接口 (`/v2/ws/`) 即使使用相同的 `roomID`，实际上也是**完全隔离的两个房间**。V1 客户端无法与 V2 客户端通信。
 - `roomID` 可以是任意字符串（建议使用有意义的名称）
 
 **示例**：
 ```
-房间 "team-dev"    → 客户端 A、B、C（可以互相共享）
-房间 "personal"    → 客户端 D、E（可以互相共享）
-房间 "family"      → 客户端 F、G、H（可以互相共享）
+房间 "team-dev" (V2)    → 客户端 A、B (V2协议)
+房间 "team-dev" (V1)    → 客户端 C、D (V1协议) 
+(A/B 与 C/D 互不通)
 ```
 
 ## API 端点
 
-### WebSocket 连接
+### V2 WebSocket 连接 (二进制协议)
+- **路径**：`/v2/ws/{roomID}`
+- **协议**：WebSocket (Binary Frames)
+- **说明**：连接到指定房间 (V2隔离)
+
+### V1 WebSocket 连接 (JSON协议)
 - **路径**：`/ws/{roomID}`
-- **协议**：WebSocket
-- **说明**：连接到指定房间
+- **协议**：WebSocket (Text Frames)
+- **说明**：连接到指定房间 (V1隔离)
 
 ### 健康检查
 - **路径**：`/health`
