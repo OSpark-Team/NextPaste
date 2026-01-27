@@ -304,12 +304,14 @@ onMounted(() => {
           @update:url="saveClientUrl"
         />
 
-        <!-- 连接信息（仅服务器模式显示） -->
+        <!-- 连接信息（服务器模式或客户端已连接时显示） -->
         <ConnectionInfo
-          v-if="mode === 'server'"
-          :is-running="status.isRunning"
+          v-if="mode === 'server' || (mode === 'client' && clientStatus.isConnected)"
+          :is-running="hasActiveConnection"
           :client-count="status.clientCount"
           :port="config.port"
+          :mode="mode"
+          :server-url="clientUrl"
         />
       </div>
 

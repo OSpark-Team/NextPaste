@@ -12,7 +12,7 @@
       <h2 class="section-title">连接信息</h2>
     </div>
     
-    <div v-if="!isRunning" class="empty-state">
+    <div v-if="!isRunning && mode === 'server'" class="empty-state">
       <div class="empty-icon">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="12" r="10"/>
@@ -23,16 +23,21 @@
       <p class="empty-hint">启动服务器后可查看连接信息</p>
     </div>
 
+    <div v-else-if="!isRunning && mode === 'client'" class="empty-state">
+       <!-- 客户端模式未连接时不显示此组件，或者显示提示 -->
+       <p class="empty-text">未连接服务器</p>
+    </div>
+
     <div v-else class="connection-list">
-      <div class="stat-card">
+      <div v-if="mode === 'server'" class="stat-card">
         <div class="stat-label">已连接客户端</div>
         <div class="stat-value">{{ clientCount }}</div>
       </div>
 
-      <div class="divider"></div>
+      <div v-if="mode === 'server'" class="divider"></div>
 
       <div class="addresses-section">
-        <p class="addresses-title">可用连接地址</p>
+        <p class="addresses-title">{{ mode === 'client' ? '服务器地址' : '可用连接地址' }}</p>
         <div v-if="addresses.length === 0" class="loading">
           <div class="loading-spinner"></div>
           <span>正在获取网络地址...</span>
@@ -99,11 +104,18 @@ import QRCode from 'qrcode'
 
 interface Props {
   isRunning: boolean
-  clientCount: number
-  port: number
+  clientCount?: number
+  port?: number
+  mode?: 'server' | 'client'
+  serverUrl?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  mode: 'server',
+  serverUrl: '',
+  clientCount: 0,
+  port: 8080
+})
 
 const addresses = ref<string[]>([])
 const copiedIndex = ref<number>(-1)
@@ -114,6 +126,15 @@ const qrCodeUrl = ref('')
 const currentQrAddress = ref('')
 
 const loadAddresses = async () => {
+  if (props.mode === 'client') {
+    if (props.serverUrl) {
+      addresses.value = [props.serverUrl]
+    } else {
+      addresses.value = []
+    }
+    return
+  }
+
   if (!props.isRunning) {
     addresses.value = []
     return
@@ -173,8 +194,14 @@ watch(() => props.port, () => {
   }
 })
 
+watch(() => props.serverUrl, () => {
+  if (props.mode === 'client') {
+    loadAddresses()
+  }
+})
+
 onMounted(() => {
-  if (props.isRunning) {
+  if (props.isRunning || (props.mode === 'client' && props.serverUrl)) {
     loadAddresses()
   }
 })

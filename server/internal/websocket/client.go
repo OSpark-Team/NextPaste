@@ -32,6 +32,11 @@ type WSClient struct {
 
 	// V1.1 二进制协议管理器
 	protocolMgr *protocol.BinaryProtocolManager
+
+	// 分片重组缓冲区
+	PendingMsgID  uint32
+	PendingBuffer []byte
+	PendingMeta   *protocol.TransferMeta
 }
 
 // NewWSClient 创建 WebSocket 客户端
@@ -293,13 +298,77 @@ func (c *WSClient) handleBinaryText(msg *protocol.BinaryMessage) {
 
 // handleBinaryImage 处理图片消息（V1.1）
 func (c *WSClient) handleBinaryImage(msg *protocol.BinaryMessage) {
-	imageData := msg.GetImageData()
-	sizeMB := float64(len(imageData)) / 1024 / 1024
-	c.log("INFO", fmt.Sprintf("收到图片数据 [%.2f MB]", sizeMB))
+	var fullData []byte
+	var finished bool
 
-	// 调用回调函数（通知 App 层写入本地剪贴板）
-	if c.clipboardCallback != nil {
-		c.clipboardCallback("image", imageData)
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		// 检查是否是分片消息
+		isPending := c.PendingBuffer != nil
+
+		// 如果包含元数据（首帧）
+		if (msg.Flags & protocol.FlagHasMeta) != 0 {
+			if isPending {
+				c.log("WARNING", "未完成上一次传输就开始新传输，丢弃旧数据")
+			}
+
+			// 初始化缓冲区
+			c.PendingMsgID = msg.MsgID
+			c.PendingMeta = msg.Meta
+
+			expectedSize := int(0)
+			if msg.Meta != nil {
+				expectedSize = int(msg.Meta.Size)
+			}
+			// 限制预分配大小，防止 OOM
+			if expectedSize > 100*1024*1024 {
+				expectedSize = 100 * 1024 * 1024
+			}
+			c.PendingBuffer = make([]byte, 0, expectedSize)
+
+			// 追加数据（BinaryData 是剥离元数据后的）
+			if msg.BinaryData != nil {
+				c.PendingBuffer = append(c.PendingBuffer, msg.BinaryData...)
+			} else {
+				c.PendingBuffer = append(c.PendingBuffer, msg.Payload...)
+			}
+		} else {
+			// 后续分片
+			if !isPending {
+				return
+			}
+			if msg.MsgID != c.PendingMsgID {
+				c.PendingBuffer = nil
+				c.PendingMeta = nil
+				return
+			}
+			c.PendingBuffer = append(c.PendingBuffer, msg.Payload...)
+		}
+
+		// 检查是否还有后续分片
+		if (msg.Flags & protocol.FlagMF) != 0 {
+			return
+		}
+
+		// 传输完成
+		fullData = c.PendingBuffer
+
+		// 清理缓冲区
+		c.PendingBuffer = nil
+		c.PendingMeta = nil
+		finished = true
+	}()
+
+	if finished {
+		sizeMB := float64(len(fullData)) / 1024 / 1024
+		c.log("INFO", fmt.Sprintf("收到完整图片数据 [%.2f MB]", sizeMB))
+
+		// 调用回调函数（通知 App 层写入本地剪贴板）
+		if c.clipboardCallback != nil {
+			c.clipboardCallback("image", fullData)
+		}
 	}
 }
 
