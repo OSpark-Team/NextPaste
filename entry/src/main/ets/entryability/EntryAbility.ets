@@ -67,6 +67,7 @@ export default class EntryAbility extends UIAbility {
       // 初始化持久化存储
       PersistentStorage.persistProp('serverAddress', '');
       PersistentStorage.persistProp('deviceMode', DeviceMode.BIDIRECTIONAL);
+      PersistentStorage.persistProp('hasShownBinaryProtocolAlert', false);
 
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });

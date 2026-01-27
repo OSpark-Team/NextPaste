@@ -40,6 +40,10 @@ import Want from '@ohos.app.ability.Want';
    */
   @State logFilter: LogLevel | 'ALL' = 'ALL';
   /**
+   * 是否显示过二进制协议更新提示（V1.1）
+   */
+  @StorageLink('hasShownBinaryProtocolAlert') hasShownBinaryProtocolAlert: boolean = false;
+  /**
    * 是否正在操作
    */
   @State isOperating: boolean = false;
@@ -75,6 +79,43 @@ import Want from '@ohos.app.ability.Want';
     // 初始化控制器
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.controller.init(context);
+
+    // 检查是否需要显示版本更新提示
+    if (!this.hasShownBinaryProtocolAlert) {
+      this.showUpdateDialog();
+    }
+  }
+
+  /**
+   * 显示更新提示对话框
+   */
+  private showUpdateDialog() {
+    try {
+      const uiContext = this.getUIContext();
+      const promptAction = uiContext.getPromptAction();
+      
+      promptAction.showDialog({
+        title: $r('app.string.update_dialog_title'),
+        message: $r('app.string.update_dialog_message'),
+        buttons: [
+          {
+            text: $r('app.string.update_dialog_confirm'),
+            color: '#007DFF'
+          }
+        ]
+      }, (err, data) => {
+        if (err) {
+          console.error('showDialog err: ' + err);
+          return;
+        }
+        // 用户点击确认后，标记为已显示
+        this.hasShownBinaryProtocolAlert = true;
+      });
+    } catch (error) {
+      console.error(`showDialog error: ${JSON.stringify(error)}`);
+    } finally {
+      this.hasShownBinaryProtocolAlert = true;
+    }
   }
 
   /**
