@@ -1,38 +1,23 @@
 <template>
-  <div class="server-config glass-card">
+  <div class="client-config glass-card">
     <div class="section-header">
       <div class="section-icon">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+          <path d="M17 8l4 4m0 0l-4 4m4-4H3"/>
         </svg>
       </div>
-      <h2 class="section-title">服务器配置</h2>
+      <h2 class="section-title">客户端配置</h2>
     </div>
     
     <div class="config-form">
       <div class="form-group">
-        <label class="form-label">监听地址</label>
+        <label class="form-label">服务器地址</label>
         <div class="input-wrapper">
           <input 
-            v-model="localConfig.address" 
+            v-model="localUrl" 
             type="text" 
-            placeholder="0.0.0.0"
-            :disabled="isRunning"
-            class="input-field"
-          />
-          <div class="input-glow"></div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">端口号</label>
-        <div class="input-wrapper">
-          <input 
-            v-model.number="localConfig.port" 
-            type="number" 
-            placeholder="8080"
-            :disabled="isRunning"
+            placeholder="ws://server:8080/ws"
+            :disabled="isConnected"
             class="input-field"
           />
           <div class="input-glow"></div>
@@ -41,25 +26,25 @@
 
       <div class="form-actions">
         <button 
-          v-if="!isRunning"
-          @click="handleStart" 
+          v-if="!isConnected"
+          @click="handleConnect" 
           class="btn btn-primary"
           :disabled="!isValid"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"/>
+            <path d="M8 5v14l11-7z"/>
           </svg>
-          启动服务
+          连接服务器
         </button>
         <button 
           v-else
-          @click="handleStop" 
+          @click="handleDisconnect" 
           class="btn btn-danger"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" rx="1"/>
           </svg>
-          停止服务
+          断开连接
         </button>
       </div>
     </div>
@@ -68,51 +53,48 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch } from 'vue'
-import type { ServerConfig } from '../types'
 
 interface Props {
-  config: ServerConfig
-  isRunning: boolean
+  url: string
+  isConnected: boolean
 }
 
 interface Emits {
-  (e: 'start', config: ServerConfig): void
-  (e: 'stop'): void
-  (e: 'update:config', config: ServerConfig): void
+  (e: 'connect', url: string): void
+  (e: 'disconnect'): void
+  (e: 'update:url', url: string): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const localConfig = ref<ServerConfig>({ ...props.config })
+const localUrl = ref(props.url)
 
-watch(() => props.config, (newConfig) => {
-  localConfig.value = { ...newConfig }
-}, { deep: true })
-
-watch(localConfig, (newConfig) => {
-  emit('update:config', newConfig)
-}, { deep: true })
-
-const isValid = computed(() => {
-  return localConfig.value.address.length > 0 && 
-         localConfig.value.port > 0 && 
-         localConfig.value.port <= 65535
+watch(() => props.url, (newUrl) => {
+  localUrl.value = newUrl
 })
 
-const handleStart = () => {
+watch(localUrl, (newUrl) => {
+  emit('update:url', newUrl)
+})
+
+const isValid = computed(() => {
+  return localUrl.value.startsWith('ws://') || localUrl.value.startsWith('wss://')
+})
+
+const handleConnect = () => {
   if (isValid.value) {
-    emit('start', localConfig.value)
+    emit('connect', localUrl.value)
   }
 }
 
-const handleStop = () => {
-  emit('stop')
+const handleDisconnect = () => {
+  emit('disconnect')
 }
 </script>
 
 <style scoped>
-.server-config {
+.client-config {
   padding: var(--spacing-lg);
   animation: fadeIn 0.4s ease;
 }
@@ -130,7 +112,7 @@ const handleStop = () => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, #a855f7 100%);
+  background: linear-gradient(135deg, var(--color-client) 0%, var(--color-client-hover) 100%);
   border-radius: var(--radius-md);
   color: white;
 }
@@ -183,8 +165,8 @@ const handleStop = () => {
 }
 
 .input-field:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-glow);
+  border-color: var(--color-client);
+  box-shadow: 0 0 0 3px var(--color-client-glow);
 }
 
 .input-field:disabled {
@@ -194,11 +176,17 @@ const handleStop = () => {
   cursor: not-allowed;
 }
 
+.input-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .input-glow {
   position: absolute;
   inset: -1px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--color-primary), #a855f7);
+  background: linear-gradient(135deg, var(--color-client), var(--color-client-hover));
   opacity: 0;
   z-index: -1;
   transition: opacity var(--transition-normal);
@@ -249,14 +237,14 @@ const handleStop = () => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, var(--color-client) 0%, var(--color-client-hover) 100%);
   color: white;
-  box-shadow: 0 4px 16px var(--color-primary-glow);
+  box-shadow: 0 4px 16px var(--color-client-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px var(--color-primary-glow);
+  box-shadow: 0 6px 24px var(--color-client-glow);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -277,4 +265,5 @@ const handleStop = () => {
 .btn-danger:active {
   transform: translateY(0);
 }
+
 </style>

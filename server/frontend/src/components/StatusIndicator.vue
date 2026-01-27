@@ -1,6 +1,6 @@
 <template>
-  <div class="status-indicator">
-    <div class="status-dot" :class="statusClass"></div>
+  <div class="status-indicator" :class="{ 'is-running': isRunning }">
+    <div class="status-dot" :class="{ 'running': isRunning, 'stopped': !isRunning }"></div>
     <span class="status-text">{{ statusText }}</span>
   </div>
 </template>
@@ -13,11 +13,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-
-const statusClass = computed(() => ({
-  'status-running': props.isRunning,
-  'status-stopped': !props.isRunning
-}))
 
 const statusText = computed(() => 
   props.isRunning ? '运行中' : '已停止'
@@ -33,35 +28,39 @@ const statusText = computed(() =>
   background: var(--surface-dark);
   border-radius: var(--radius-full);
   border: 1px solid var(--border-glass);
+  transition: all var(--transition-normal);
+}
+
+.status-indicator.is-running {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   transition: all var(--transition-normal);
 }
 
-.status-running {
+.status-dot.running {
   background-color: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success-glow),
-              0 0 16px var(--color-success-glow);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
   animation: breathe 2s ease-in-out infinite;
 }
 
-.status-stopped {
+.status-dot.stopped {
   background-color: var(--text-muted);
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .status-text {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-  letter-spacing: 0.02em;
+  transition: color var(--transition-normal);
 }
 
-.status-running + .status-text {
+.status-indicator.is-running .status-text {
   color: var(--color-success);
 }
 </style>

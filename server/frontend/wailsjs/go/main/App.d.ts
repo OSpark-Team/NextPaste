@@ -4,9 +4,17 @@ import {main} from '../models';
 
 export function ClearLogs():Promise<void>;
 
+export function ConnectClient(arg1:string):Promise<void>;
+
+export function DisconnectClient():Promise<void>;
+
+export function GetClientStatus():Promise<Record<string, any>>;
+
 export function GetLocalIPs():Promise<Array<string>>;
 
 export function GetLogs():Promise<Array<main.LogEntry>>;
+
+export function GetMode():Promise<string>;
 
 export function GetServerStatus():Promise<Record<string, any>>;
 

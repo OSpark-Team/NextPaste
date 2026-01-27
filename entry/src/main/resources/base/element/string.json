@@ -41,6 +41,10 @@
       "value": "仅发送"
     },
     {
+      "name": "reason_camera",
+      "value": "扫码识别连接地址"
+    },
+    {
       "name": "mode_receive_only",
       "value": "仅接收"
     },
@@ -210,7 +214,7 @@
     },
     {
       "name": "about_version",
-      "value": "Version 1.0.0 (HarmonyOS)"
+      "value": "Version 1.2.0 (HarmonyOS)"
     },
     {
       "name": "about_team_title",
@@ -267,6 +271,7 @@
     {
       "name": "toast_please_start_sync_first",
       "value": "请先开始同步"
+<<<<<<< HEAD
     },
     {
       "name": "update_dialog_title",
@@ -279,6 +284,8 @@
     {
       "name": "update_dialog_confirm",
       "value": "我已知晓"
+=======
+>>>>>>> 2d6b21b085626dc15ec3af766a0613263ac94ba6
     }
   ]
 }
