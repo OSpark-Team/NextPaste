@@ -2,7 +2,7 @@
   "app": {
     "bundleName": "zone.yby.clipboard",
     "vendor": "example",
-    "versionCode": 20260126,
+    "versionCode": 20260127,
     "versionName": "1.2.0",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
