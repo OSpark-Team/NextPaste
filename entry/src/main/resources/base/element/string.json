@@ -267,6 +267,18 @@
     {
       "name": "toast_please_start_sync_first",
       "value": "请先开始同步"
+    },
+    {
+      "name": "update_dialog_title",
+      "value": "版本更新提示"
+    },
+    {
+      "name": "update_dialog_message",
+      "value": "本次版本不兼容旧版JSON协议，请保证服务端和客户端均是最新版本。"
+    },
+    {
+      "name": "update_dialog_confirm",
+      "value": "我已知晓"
     }
   ]
 }

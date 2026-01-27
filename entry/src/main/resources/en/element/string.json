@@ -267,6 +267,18 @@
     {
       "name": "toast_please_start_sync_first",
       "value": "Please start sync first"
+    },
+    {
+      "name": "update_dialog_title",
+      "value": "Version Update Notice"
+    },
+    {
+      "name": "update_dialog_message",
+      "value": "This release is not compatible with the legacy JSON protocol. Please ensure both the server and client are updated to the latest version."
+    },
+    {
+      "name": "update_dialog_confirm",
+      "value": "I understand"
     }
   ]
 }
