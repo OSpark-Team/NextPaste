@@ -271,7 +271,6 @@
     {
       "name": "toast_please_start_sync_first",
       "value": "请先开始同步"
-<<<<<<< HEAD
     },
     {
       "name": "update_dialog_title",
@@ -284,8 +283,6 @@
     {
       "name": "update_dialog_confirm",
       "value": "我已知晓"
-=======
->>>>>>> 2d6b21b085626dc15ec3af766a0613263ac94ba6
     }
   ]
 }
