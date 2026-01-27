@@ -32,6 +32,11 @@ type Client struct {
 	ConnTime   time.Time
 	Send       chan []byte
 	mu         sync.RWMutex
+
+	// 分片重组缓冲区
+	PendingMsgID  uint32
+	PendingBuffer []byte
+	PendingMeta   *protocol.TransferMeta
 }
 
 // LogCallback 日志回调函数
@@ -288,102 +293,142 @@ func (s *Server) handleBinaryText(client *Client, msg *protocol.BinaryMessage) {
 	}
 
 	// 广播给其他客户端
-	s.broadcastBinary(msg, client.ID)
+	s.broadcastContent("text", []byte(text), "", client.ID)
 }
 
 // handleBinaryImage 处理图片消息（V1.1）
 func (s *Server) handleBinaryImage(client *Client, msg *protocol.BinaryMessage) {
-	imageData := msg.GetImageData()
+	var fullData []byte
+	var mime string
+	var deviceName string
+	var finished bool
 
-	client.mu.RLock()
-	deviceName := client.DeviceName
-	client.mu.RUnlock()
+	func() {
+		client.mu.Lock()
+		defer client.mu.Unlock()
 
-	sizeMB := float64(len(imageData)) / 1024 / 1024
-	s.log("INFO", fmt.Sprintf("收到图片数据 [%.2f MB] 来自 %s", sizeMB, deviceName))
+		deviceName = client.DeviceName
 
-	// 调用回调函数（通知 App 层写入本地剪贴板）
-	if s.clipboardCallback != nil {
-		s.clipboardCallback("image", imageData)
+		// 检查是否是分片消息
+		isPending := client.PendingBuffer != nil
+
+		// 如果包含元数据（首帧）
+		if (msg.Flags & protocol.FlagHasMeta) != 0 {
+			if isPending {
+				s.log("WARNING", fmt.Sprintf("客户端 %s 未完成上一次传输就开始新传输，丢弃旧数据", client.ID))
+			}
+
+			// 初始化缓冲区
+			client.PendingMsgID = msg.MsgID
+			client.PendingMeta = msg.Meta
+
+			expectedSize := int(0)
+			if msg.Meta != nil {
+				expectedSize = int(msg.Meta.Size)
+			}
+			// 限制预分配大小，防止 OOM
+			if expectedSize > 100*1024*1024 {
+				expectedSize = 100 * 1024 * 1024
+			}
+			client.PendingBuffer = make([]byte, 0, expectedSize)
+
+			// 追加数据（BinaryData 是剥离元数据后的）
+			if msg.BinaryData != nil {
+				client.PendingBuffer = append(client.PendingBuffer, msg.BinaryData...)
+			} else {
+				client.PendingBuffer = append(client.PendingBuffer, msg.Payload...)
+			}
+		} else {
+			// 后续分片
+			if !isPending {
+				return
+			}
+			if msg.MsgID != client.PendingMsgID {
+				client.PendingBuffer = nil
+				client.PendingMeta = nil
+				return
+			}
+			client.PendingBuffer = append(client.PendingBuffer, msg.Payload...)
+		}
+
+		// 检查是否还有后续分片
+		if (msg.Flags & protocol.FlagMF) != 0 {
+			return
+		}
+
+		// 传输完成
+		fullData = client.PendingBuffer
+		mime = "image/png"
+		if client.PendingMeta != nil && client.PendingMeta.Mime != "" {
+			mime = client.PendingMeta.Mime
+		}
+
+		// 清理缓冲区
+		client.PendingBuffer = nil
+		client.PendingMeta = nil
+		finished = true
+	}()
+
+	if finished {
+		sizeMB := float64(len(fullData)) / 1024 / 1024
+		s.log("INFO", fmt.Sprintf("收到完整图片数据 [%.2f MB] 来自 %s", sizeMB, deviceName))
+
+		// 调用回调函数
+		if s.clipboardCallback != nil {
+			s.clipboardCallback("image", fullData)
+		}
+
+		// 广播给其他客户端
+		s.broadcastContent("image", fullData, mime, client.ID)
 	}
-
-	// 广播给其他客户端
-	s.broadcastBinary(msg, client.ID)
 }
 
-// broadcastBinary 广播二进制消息给所有客户端（除了发送者）
-func (s *Server) broadcastBinary(msg *protocol.BinaryMessage, excludeID string) {
-	// 重新封装消息以使用服务器的 UUID
-	var data []byte
-	var err error
+// broadcastContent 广播内容（通用方法，支持分片）
+func (s *Server) broadcastContent(dataType string, content []byte, mime string, excludeID string) error {
+	var msgs [][]byte
 
-	switch msg.Type {
-	case protocol.TypeText:
-		data, err = s.protocolMgr.CreateText(msg.GetTextContent())
-	case protocol.TypeImage:
-		imageData := msg.GetImageData()
-		mime := "image/png"
-		if msg.Meta != nil && msg.Meta.Mime != "" {
-			mime = msg.Meta.Mime
+	switch dataType {
+	case "text":
+		msg, err := s.protocolMgr.CreateText(string(content))
+		if err != nil {
+			return err
 		}
-		data, err = s.protocolMgr.CreateImageFrame(imageData, mime)
+		msgs = [][]byte{msg}
+	case "image":
+		if mime == "" {
+			mime = "image/png"
+		}
+		chunks, err := s.protocolMgr.CreateImageChunks(content, mime, 64*1024)
+		if err != nil {
+			return err
+		}
+		msgs = chunks
 	default:
-		return
-	}
-
-	if err != nil {
-		s.log("ERROR", fmt.Sprintf("封装广播消息失败: %v", err))
-		return
+		return fmt.Errorf("不支持的数据类型: %s", dataType)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for id, client := range s.clients {
-		if id != excludeID {
+		if id == excludeID {
+			continue
+		}
+		for _, msg := range msgs {
 			select {
-			case client.Send <- data:
+			case client.Send <- msg:
 			default:
 				s.log("WARNING", fmt.Sprintf("客户端 %s 发送队列已满", id))
 			}
 		}
 	}
+	return nil
 }
 
 // BroadcastClipboardBinary 广播剪贴板数据（V1.1 二进制协议）
-// dataType: "text" 或 "image"
-// content: 对于文本是字符串字节，对于图片是原始二进制数据
 func (s *Server) BroadcastClipboardBinary(dataType string, content []byte) error {
 	s.log("INFO", fmt.Sprintf("广播剪贴板数据: %s", dataType))
-
-	var data []byte
-	var err error
-
-	switch dataType {
-	case "text":
-		data, err = s.protocolMgr.CreateText(string(content))
-	case "image":
-		data, err = s.protocolMgr.CreateImageFrame(content, "image/png")
-	default:
-		return fmt.Errorf("不支持的数据类型: %s", dataType)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, client := range s.clients {
-		select {
-		case client.Send <- data:
-		default:
-			s.log("WARNING", fmt.Sprintf("客户端 %s 发送队列已满", client.ID))
-		}
-	}
-
-	return nil
+	return s.broadcastContent(dataType, content, "", "")
 }
 
 // BroadcastClipboard 广播剪贴板数据（兼容旧接口，内部将 Base64 转为二进制）

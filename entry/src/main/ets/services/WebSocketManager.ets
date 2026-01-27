@@ -45,6 +45,11 @@ export class WebSocketManager {
   private messageReceivedCallback: MessageReceivedCallback | null = null;
   private errorCallback: ErrorCallback | null = null;
 
+  // 分片重组状态
+  private pendingMsgId: number = 0;
+  private pendingBuffer: Uint8Array | null = null;
+  private pendingMeta: TransferMeta | null = null;
+
   /**
    * 设置连接状态回调
    * @param callback 回调函数
@@ -179,20 +184,53 @@ export class WebSocketManager {
 
       // 将 ArrayBuffer 转换为 Uint8Array
       const imageBytes = new Uint8Array(pngData);
-
-      // 使用二进制协议封装图片帧
-      // 对于小图片，使用单帧发送（设置 MF=0 表示无后续分片）
-      const frame = BinaryProtocolManager.createStartFrame(
+      
+      // 分片大小 64KB
+      const CHUNK_SIZE = 64 * 1024;
+      let offset = 0;
+      const totalLen = imageBytes.byteLength;
+      
+      // 1. 发送首帧（预留空间给元数据，使用最大32KB数据以确保首帧不过大）
+      const firstChunkSize = Math.min(32 * 1024, totalLen);
+      const firstChunkData = imageBytes.subarray(0, firstChunkSize);
+      offset += firstChunkSize;
+      
+      const startFrame = BinaryProtocolManager.createStartFrame(
         MessageType.IMAGE,
         msgId,
         meta,
-        imageBytes
+        firstChunkData
       );
-
-      // 修正：createStartFrame 默认设置 MF=1，我们需要手动创建无分片标志的帧
-      // 由于 BinaryProtocolManager 的 createStartFrame 固定设置 MF|HAS_META，
-      // 对于小图片我们需要直接发送完整数据帧
-      await this.ws.send(frame);
+      
+      // 注意：createStartFrame 默认包含 MF 和 HAS_META 标志
+      // 如果图片很小，一次就能发完（offset >= totalLen），我们需要手动清除 MF 标志
+      if (offset >= totalLen) {
+          const view = new Uint8Array(startFrame);
+          // Flags 在偏移 3
+          view[3] &= ~MessageFlags.MF;
+      }
+      
+      await this.ws.send(startFrame);
+      
+      // 2. 循环发送后续分片
+      let seq = 1;
+      while (offset < totalLen) {
+          const end = Math.min(offset + CHUNK_SIZE, totalLen);
+          const chunkData = imageBytes.subarray(offset, end);
+          const isLast = end >= totalLen;
+          
+          const chunkFrame = BinaryProtocolManager.createChunkFrame(
+              MessageType.IMAGE,
+              msgId,
+              seq,
+              chunkData,
+              isLast
+          );
+          
+          await this.ws.send(chunkFrame);
+          offset = end;
+          seq++;
+      }
 
       return true;
     } catch (error) {
@@ -248,6 +286,50 @@ export class WebSocketManager {
 
       // 使用二进制协议解析消息
       const message = BinaryProtocolManager.parse(value);
+
+      // 分片重组逻辑
+      if (message.flags & MessageFlags.HAS_META) {
+          // 首帧
+          this.pendingMsgId = message.msgId;
+          this.pendingMeta = message.meta || null;
+          
+          // 如果解析器已经提取了 binaryData (剥离元数据后)，使用它；否则使用 payload
+          // 注意：需要确认 BinaryMessage 定义。假设 parse 方法处理了元数据提取。
+          let data = message.binaryData ? new Uint8Array(message.binaryData) : new Uint8Array(message.payload);
+          this.pendingBuffer = data;
+      } else if (this.pendingBuffer && message.msgId === this.pendingMsgId) {
+          // 后续分片
+          const newChunk = new Uint8Array(message.payload);
+          const newData = new Uint8Array(this.pendingBuffer.length + newChunk.length);
+          newData.set(this.pendingBuffer);
+          newData.set(newChunk, this.pendingBuffer.length);
+          this.pendingBuffer = newData;
+      } else if (message.flags & MessageFlags.MF) {
+          // 孤立分片或ID不匹配，忽略
+          return;
+      }
+
+      // 检查是否有后续
+      if (message.flags & MessageFlags.MF) {
+          return;
+      }
+
+      // 如果经历了重组，更新消息内容
+      if (this.pendingBuffer) {
+          // 修复：直接赋值 Uint8Array，不要转换为 ArrayBuffer（因为接口定义是 Uint8Array）
+          message.payload = this.pendingBuffer;
+          // 修复：强制更新 binaryData，不仅仅是当它存在时（因为最后一片可能没有 binaryData）
+          message.binaryData = this.pendingBuffer;
+          
+          if (this.pendingMeta) {
+             // 修复：类型断言，解决 Structural typing 报错
+             message.meta = this.pendingMeta as Record<string, Object>;
+          }
+          // Reset
+          this.pendingBuffer = null;
+          this.pendingMeta = null;
+          this.pendingMsgId = 0;
+      }
 
       // 触发回调
       if (this.messageReceivedCallback) {
@@ -362,7 +444,7 @@ export class WebSocketManager {
    * 使用与 BinaryProtocolManager.pack 相同的格式
    */
   private createHeartbeatFrame(): ArrayBuffer {
-    const HEADER_SIZE = 32;
+    const HEADER_SIZE = 33;
     const PROTOCOL_MAGIC = 0x4E50; // 'NP'
     const PROTOCOL_VERSION = 0x1;
 

@@ -41,6 +41,10 @@
       "value": "仅发送"
     },
     {
+      "name": "reason_camera",
+      "value": "扫码识别连接地址"
+    },
+    {
       "name": "mode_receive_only",
       "value": "仅接收"
     },

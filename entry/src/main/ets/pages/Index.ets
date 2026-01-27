@@ -12,6 +12,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { scanBarcode, scanCore } from '@kit.ScanKit';
 
 /**
  * 主页面
@@ -198,17 +199,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
       const fileSizeKB = fileSize / 1024;
       const fileSizeMB = fileSizeKB / 1024;
 
-      // 检查文件大小限制（3.5MB）
-      const SIZE_LIMIT = 3.5 * 1024 * 1024; // 3.5MB
-      if (fileSize > SIZE_LIMIT) {
-        fileIo.closeSync(file);
-        this.viewModel.addLog(LogLevel.ERROR, `图片过大 (${fileSizeMB.toFixed(2)} MB)，当前版本不支持超过 3.5MB 的图片`);
-        this.getUIContext()?.getPromptAction().showToast({
-          message: `图片过大 (${fileSizeMB.toFixed(2)} MB)\n当前版本不支持超过 3.5MB 的图片`,
-          duration: 3000
-        });
-        return;
-      }
+
 
       // 创建 ImageSource 并转换为 PixelMap
       const imageSourceApi = image.createImageSource(file.fd);
@@ -269,6 +260,49 @@ import { BusinessError } from '@kit.BasicServicesKit';
       return this.viewModel.logs;
     }
     return this.viewModel.logs.filter(log => log.level === this.logFilter);
+  }
+
+  /**
+   * 启动扫码
+   */
+  private startScan(): void {
+    try {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const options: scanBarcode.ScanOptions = {
+        scanTypes: [scanCore.ScanType.QR_CODE],
+        enableMultiMode: true,
+        enableAlbum: true
+      };
+      
+      scanBarcode.startScanForResult(context, options)
+        .then((result: scanBarcode.ScanResult) => {
+          if (result.originalValue) {
+            this.viewModel.serverAddress = result.originalValue;
+            this.serverAddress = result.originalValue;
+          }
+        })
+        .catch((error: BusinessError) => {
+          console.error(`扫码失败: code=${error.code}, message=${error.message}`);
+        });
+    } catch (error) {
+       console.error(`扫码异常: ${JSON.stringify(error)}`);
+    }
+  }
+
+  @Builder
+  buildScanButton() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      SymbolGlyph($r('sys.symbol.camera'))
+        .fontSize(24)
+        .fontColor([$r('app.color.text_primary')])
+    }
+    .width(48)
+    .height(48)
+    .borderRadius(8)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.startScan();
+    })
   }
 
   build() {
@@ -423,6 +457,9 @@ import { BusinessError } from '@kit.BasicServicesKit';
             disabled: this.viewModel.isRunning,
             onValueChanged: (value: string) => {
               this.viewModel.serverAddress = value;
+            },
+            actionButton: () => {
+              this.buildScanButton()
             }
           })
 

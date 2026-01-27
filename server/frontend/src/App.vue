@@ -234,6 +234,7 @@ onMounted(() => {
             </svg>
           </div>
           <h1 class="app-title">NextPaste Server</h1>
+          <span class="version-badge">NPBP V1.1</span>
         </div>
         <div class="header-right">
           <StatusIndicator :is-running="hasActiveConnection" />
@@ -390,6 +391,19 @@ onMounted(() => {
   background-clip: text;
   margin: 0;
   letter-spacing: -0.02em;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  letter-spacing: 0.05em;
 }
 
 .header-right {

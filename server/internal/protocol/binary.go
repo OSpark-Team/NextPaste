@@ -161,7 +161,96 @@ func (m *BinaryProtocolManager) CreateHeartbeat() []byte {
 	return m.pack(TypeHeartbeat, FlagNone, m.getNextMsgID(), 0, nil)
 }
 
-// CreateImageFrame 创建图片帧（带元数据的单帧）
+// CreateImageChunks 创建图片分片消息
+// chunkSize: 每个分片的 Payload 最大字节数 (建议 64*1024)
+func (m *BinaryProtocolManager) CreateImageChunks(imageData []byte, mime string, chunkSize int) ([][]byte, error) {
+	if len(imageData) == 0 {
+		return nil, ErrInvalidInput
+	}
+	if chunkSize < 1024 {
+		chunkSize = 64 * 1024 // 默认 64KB
+	}
+
+	msgID := m.getNextMsgID()
+	meta := TransferMeta{
+		Mime: mime,
+		Size: int64(len(imageData)),
+	}
+
+	// 1. 准备元数据
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		return nil, err
+	}
+	metaLen := len(metaJSON)
+
+	// 计算首帧可用数据空间
+	// 首帧 Header(33) + MetaLen(2) + MetaJSON + Data
+	usedInPayload := 2 + metaLen
+	firstChunkCap := chunkSize - usedInPayload
+	if firstChunkCap < 0 {
+		return nil, fmt.Errorf("元数据过大(%d)，无法放入单个分片(%d)", metaLen, chunkSize)
+	}
+
+	// 确定第一片数据
+	var firstChunkData []byte
+	var remainingData []byte
+
+	if len(imageData) > firstChunkCap {
+		firstChunkData = imageData[:firstChunkCap]
+		remainingData = imageData[firstChunkCap:]
+	} else {
+		firstChunkData = imageData
+		remainingData = nil
+	}
+
+	// 是否还有后续分片
+	hasMore := len(remainingData) > 0
+
+	// 创建首帧
+	startFrame, err := m.createStartFrame(TypeImage, msgID, meta, firstChunkData, hasMore)
+	if err != nil {
+		return nil, err
+	}
+
+	chunks := [][]byte{startFrame}
+
+	// 如果没有后续，直接返回
+	if !hasMore {
+		return chunks, nil
+	}
+
+	// 2. 创建后续分片
+	seq := uint32(1)
+	offset := 0
+	totalRemaining := len(remainingData)
+
+	for offset < totalRemaining {
+		end := offset + chunkSize
+		isLast := false
+		if end >= totalRemaining {
+			end = totalRemaining
+			isLast = true
+		}
+
+		chunkData := remainingData[offset:end]
+
+		flags := FlagNone
+		if !isLast {
+			flags = FlagMF
+		}
+
+		frame := m.pack(TypeImage, flags, msgID, seq, chunkData)
+		chunks = append(chunks, frame)
+
+		seq++
+		offset = end
+	}
+
+	return chunks, nil
+}
+
+// CreateImageFrame 创建单帧图片消息 (仅适用于小图片)
 func (m *BinaryProtocolManager) CreateImageFrame(imageData []byte, mime string) ([]byte, error) {
 	if len(imageData) == 0 {
 		return nil, ErrInvalidInput
@@ -172,11 +261,12 @@ func (m *BinaryProtocolManager) CreateImageFrame(imageData []byte, mime string) 
 		Size: int64(len(imageData)),
 	}
 
-	return m.createStartFrame(TypeImage, m.getNextMsgID(), meta, imageData)
+	// 单帧意味着没有后续分片
+	return m.createStartFrame(TypeImage, m.getNextMsgID(), meta, imageData, false)
 }
 
 // createStartFrame 创建带元数据的首帧
-func (m *BinaryProtocolManager) createStartFrame(msgType MessageType, msgID uint32, meta TransferMeta, chunkData []byte) ([]byte, error) {
+func (m *BinaryProtocolManager) createStartFrame(msgType MessageType, msgID uint32, meta TransferMeta, chunkData []byte, hasMore bool) ([]byte, error) {
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return nil, err
@@ -198,9 +288,11 @@ func (m *BinaryProtocolManager) createStartFrame(msgType MessageType, msgID uint
 	// 二进制数据
 	copy(payload[2+metaLen:], chunkData)
 
-	// 设置标志: HAS_META | MF (表示有元数据，且可能有后续分片)
-	// 对于小图片，实际上没有后续分片，但客户端应能正确处理
-	flags := FlagHasMeta | FlagMF
+	// 设置标志: HAS_META
+	flags := FlagHasMeta
+	if hasMore {
+		flags |= FlagMF
+	}
 
 	return m.pack(msgType, flags, msgID, 0, payload), nil
 }
