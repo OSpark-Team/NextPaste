@@ -1,147 +1,209 @@
-# **NextPaste 跨设备剪切板共享协议 (V1.1)**
+# **NextPaste 通信协议演进文档 (V1.0 \-\> V1.1)**
 
-## **1\. 概述**
+## **1\. 背景与目标**
 
-本协议基于 WebSocket，旨在实现 Windows/Mac/Linux 服务端与 HarmonyOS Next 客户端之间的剪切板数据（文本、图片、文件）实时同步。V1.1 版本在保留 V1.0 兼容性的基础上，新增了对大文件分片传输的支持。
+**NextPaste V1.0** 采用了纯文本 JSON 协议，不仅实现了快速开发（MVP），也保证了良好的调试可读性。然而，随着图片和文件同步需求的增加，V1.0 暴露出了性能瓶颈。
 
-## **2\. 通信基础**
+**NextPaste V1.1** 引入了 **NPBP (NextPaste Binary Protocol)**，旨在通过二进制帧传输解决 Base64 带来的体积膨胀和编解码开销，同时保留对 V1.0 旧版客户端的兼容性。
 
-### **2.1 数据格式**
+## **2\. V1.0 协议回顾 (Legacy)**
 
-所有通信数据帧均为标准 JSON 字符串。对于大文件实体数据，建议在 FILE\_TRANSFER\_CHUNK 动作中进行 Base64 编码，或在未来版本中升级为二进制帧。
+V1.0 基于 WebSocket **Text Frame**。所有数据（包括图片）都被封装在一个大的 JSON 对象中。
 
-### **2.2 通用消息结构**
-
-{  
-  "action": "ACTION\_ENUM",  
-  "id": "UUID-v4",  
-  "timestamp": 1700000000000,  
-  "senderId": "Device-Unique-ID",  
-  "data": { ... }  
-}
-
-## **3\. 动作定义 (Actions)**
-
-### **3.1 HANDSHAKE (握手)**
-
-连接建立后由客户端发起。V1.1 引入了能力协商机制。
-
-* **data 结构**:
+### **2.1 V1.0 报文结构**
 
 {  
-  "deviceName": "My HarmonyOS Device",  
-  "platform": "HarmonyOS",  
-  "version": "1.1",  
-  "capabilities": \["TEXT", "IMAGE", "FILE\_CHUNKED"\] // V1.1 新增：可选，用于声明支持的功能  
+  "action": "CLIPBOARD\_SYNC",  
+  "id": "uuid-v4",  
+  "timestamp": 1700000000,  
+  "senderId": "device-id-123",  
+  "data": {  
+    "type": "image", // 或 "text"  
+    "mimeType": "image/png",  
+    "content": "iVBORw0KGgoAAAANSUhEUgAA..." // Base64 String  
+  }  
 }
 
-### **3.2 HEARTBEAT (心跳)**
+### **2.2 V1.0 的局限性**
 
-用于维持 WebSocket 长连接，防止被系统防火墙或运营商断开。
+1. **体积膨胀**：Base64 编码会导致二进制数据体积增加约 **33%**。传输 10MB 图片实际需要传输 13.3MB。  
+2. **内存与CPU开销**：发送端需要 Binary \-\> Base64 String，接收端需要 Base64 String \-\> Binary。在移动设备处理大图时，容易引发 OOM (Out Of Memory) 或 UI 卡顿。  
+3. **无法分片**：JSON 是整体解析的，无法像流一样边收边写。
 
-* **data 结构**: null 或 {"uptime": 12345}
+## **3\. V1.1 协议详解 (Binary Evolution)**
 
-### **3.3 CLIPBOARD\_SYNC (剪切板同步)**
+V1.1 基于 WebSocket **Binary Frame**。我们参考了 TCP/IP 头部设计，定义了固定长度的包头和变长载荷。
 
-核心动作，用于广播剪切板内容变化。
+### **3.1 V1.1 报文结构 (NPBP)**
 
-#### **A. 文本 (Text)**
+由 **33字节固定包头** \+ **载荷 (Payload)** 组成。
 
-{  
-  "type": "text",  
-  "mimeType": "text/plain",  
-  "content": "复制的文字内容"  
+ 0                   1                   2                   3  
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  
+|  Magic (NP)   |Ver|Type |  Flags  |   Reserved    | MsgID ... |  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  
+| ... MsgID     |              Sequence Number                  |  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  
+|                       Sender UUID (128 bit)                   |  
+|                                                               |  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  
+|                        Payload Length                         |  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  
+|                        Payload Data...                        |  
+\+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+### **3.2 关键字段定义**
+
+* **Magic (0x4E50)**: 协议识别符 (ASCII 'NP')。  
+* **Type (Message Type)**:  
+  * 0x1: **HANDSHAKE** (握手)  
+  * 0x2: **TEXT** (文本)  
+  * 0x3: **IMAGE** (图片)  
+  * 0x4: **FILE** (文件)  
+* **Flags**:  
+  * Bit 0 (MF): **More Fragments**. 1 表示后续还有分片，0 表示这是最后一个分片。  
+  * Bit 1 (HAS\_META): 1 表示 Payload 头部包含 JSON 元数据（通常在分片的第一包）。
+
+### **3.3 V1.1 载荷封装详解 (Payload Examples)**
+
+V1.1 针对不同 Type 采用不同的 Payload 封装策略。**所有多字节数字均为大端序 (Big-Endian)**。
+
+#### **A. 握手包 (Type 0x1)**
+
+握手包通常不分片 (Flags: MF=0)。Payload 为纯 JSON。
+
+* **Header**: Type=0x1, Flags=0  
+* **Payload**:  
+  {"name": "Mate60 Pro", "os": "HarmonyOS 5.0", "ver": 11}
+
+#### **B. 文本同步 (Type 0x2)**
+
+文本包通常不分片。Payload 为 UTF-8 字节流。
+
+* **Header**: Type=0x2, Flags=0  
+* **Payload**:  
+  Hello NextPaste\! (UTF-8 Bytes)
+
+#### **C. 图片同步 (Type 0x3) \- 混合元数据**
+
+图片传输需要知道格式（png/jpg）。我们在 **Sequence 0** 中携带元数据，后续包仅携带数据。
+
+* **分片 1 (Start Frame)**:  
+  * **Header**: Type=0x3, Seq=0, Flags=MF=1 | HAS\_META=1  
+  * **Payload 结构**: \[2字节 MetaLen\] \+ \[Meta JSON\] \+ \[Image Binary Part 1\]  
+  * **Meta JSON**: {"mime": "image/png", "width": 1920, "height": 1080}  
+* **分片 N (End Frame)**:  
+  * **Header**: Type=0x3, Seq=N, Flags=MF=0  
+  * **Payload 结构**: \[Image Binary Part N\]
+
+#### **D. 文件传输 (Type 0x4) \- 核心新增**
+
+文件传输与图片类似，但元数据更丰富（文件名、大小），且必须严格分片。
+
+**场景**：发送一个 report.pdf (10MB)。
+
+* **Step 1: 首帧 (Sequence 0\)**  
+  * **Header**:  
+    * Type: 0x4 (FILE)  
+    * Flags: MF=1 | HAS\_META=1 (表示未结束，且包含元数据)  
+    * MsgID: 1001  
+  * **Payload**:  
+    1. **Meta Length (2 Bytes)**: e.g., 0x00 0x35 (53 bytes)  
+    2. **Meta JSON**: {"name": "report.pdf", "size": 10485760, "hash": "sha256..."}  
+    3. **Binary Data**: 文件的头 60KB 数据。  
+* **Step 2: 中间帧 (Sequence 1...N-1)**  
+  * **Header**:  
+    * Type: 0x4  
+    * Flags: MF=1 (无 HAS\_META)  
+    * MsgID: 1001  
+  * **Payload**: 纯文件二进制数据 (64KB chunks)。  
+* **Step 3: 尾帧 (Sequence N)**  
+  * **Header**:  
+    * Type: 0x4  
+    * Flags: MF=0 (传输结束)  
+    * MsgID: 1001  
+  * **Payload**: 剩余的文件数据。
+
+## **4\. 兼容性设计：智能握手策略**
+
+为了让 V1.1 的服务端（PC）能够同时服务 V1.0（旧版鸿蒙）和 V1.1（新版鸿蒙）客户端，我们采用 **协议嗅探 (Protocol Sniffing)** 机制。
+
+### **4.1 原理**
+
+WebSocket 规范本身区分消息类型：
+
+* Opcode 0x1: **Text Frame** (文本帧)  
+* Opcode 0x2: **Binary Frame** (二进制帧)
+
+**V1.0 客户端只发送 Text Frame，V1.1 客户端主要发送 Binary Frame。**
+
+### **4.2 握手流程 (Handshake Flow)**
+
+服务端在建立连接后，不主动发送消息，而是**等待客户端的第一条消息**（握手包）。
+
+sequenceDiagram  
+    participant C1 as V1.0 Client (Old)  
+    participant C2 as V1.1 Client (New)  
+    participant S as Server (PC)
+
+    Note over S: WebSocket Connected\<br/\>Wait for first message...
+
+    alt V1.0 Legacy Connection  
+        C1-\>\>S: Send Text Frame (JSON Handshake)  
+        S-\>\>S: Detect Text Frame?  
+        S-\>\>S: Mark Session as \[V1.0 Mode\]  
+        S--\>\>C1: Reply Text Frame (JSON)  
+        Note right of S: Subsequent comms use JSON  
+    else V1.1 Binary Connection  
+        C2-\>\>S: Send Binary Frame (Magic 0x4E50...)  
+        S-\>\>S: Detect Binary Frame?  
+        S-\>\>S: Check Magic Header  
+        S-\>\>S: Mark Session as \[V1.1 Mode\]  
+        S--\>\>C2: Reply Binary Frame (Ack)  
+        Note right of S: Subsequent comms use Binary  
+    end
+
+### **4.3 服务端处理逻辑 (伪代码)**
+
+在 Go (Wails) 后端中，我们可以这样处理：
+
+func (s \*Server) HandleWebSocket(conn \*websocket.Conn) {  
+    // 1\. 读取第一条消息  
+    messageType, p, err := conn.ReadMessage()  
+    if err \!= nil { return }
+
+    client := \&Client{conn: conn}
+
+    // 2\. 协议判断  
+    if messageType \== websocket.TextMessage {  
+        // \=== V1.0 兼容模式 \===  
+        client.ProtocolVersion \= 1  
+        handleJsonHandshake(client, p)  
+          
+    } else if messageType \== websocket.BinaryMessage {  
+        // \=== V1.1 二进制模式 \===  
+        if len(p) \>= 32 && p\[0\] \== 0x4E && p\[1\] \== 0x50 {  
+            client.ProtocolVersion \= 11 // 1.1  
+            handleBinaryHandshake(client, p)  
+        }  
+    }
+
+    // 3\. 进入消息循环  
+    for {  
+        // 根据 client.ProtocolVersion 决定发送/接收逻辑  
+        // 如果是 V1.0，发送时自动转 JSON \+ Base64  
+        // 如果是 V1.1，发送时封装 Binary Header  
+    }  
 }
 
-#### **B. 图片 (Image)**
+## **5\. 总结**
 
-{  
-  "type": "image",  
-  "mimeType": "image/png",  
-  "content": "iVBORw0KGgoAAAANSUhEUgAAAAE...", // Base64 编码  
-  "preview": "Base64缩略图(可选)"  
-}
+| 特性 | V1.0 (Legacy) | V1.1 (Current) | 优势 |
+| :---- | :---- | :---- | :---- |
+| **传输层** | WebSocket Text Frame | WebSocket Binary Frame | 符合数据类型本质 |
+| **数据格式** | JSON String | Custom Binary Protocol | 解析更快 |
+| **图片编码** | Base64 | Raw Bytes | **体积减少 33%，CPU 占用低** |
+| **大文件** | 不支持 (易 OOM) | 支持 (分片 Flag MF) | 支持 GB 级文件传输 |
+| **兼容性** | \- | 自动识别 V1.0 客户端降级 | 平滑过渡 |
 
-#### **C. 文件预告 (File Placeholder \- V1.1 新增)**
-
-当检测到文件复制时发送，作为文件传输序列的引导消息。
-
-{  
-  "type": "file",  
-  "mimeType": "application/octet-stream",  
-  "content": "NextPaste\_File\_Transfer\_Pending",  
-  "transferId": "unique-transfer-uuid" // 关联后续的文件流  
-}
-
-## **4\. 文件分片传输协议 (V1.1 新增)**
-
-为避免大文件阻塞 WebSocket 队列，必须采用分片传输。
-
-### **4.1 FILE\_TRANSFER\_START (初始化)**
-
-告知接收端准备接收文件元数据。
-
-* **data 结构**:
-
-{  
-  "transferId": "unique-transfer-uuid",  
-  "fileName": "document.pdf",  
-  "fileSize": 15728640,  
-  "totalChunks": 240,  
-  "fileHash": "sha256-or-md5-hash",  
-  "mimeType": "application/pdf"  
-}
-
-### **4.2 FILE\_TRANSFER\_CHUNK (分片载荷)**
-
-持续发送文件切片。
-
-* **data 结构**:
-
-{  
-  "transferId": "unique-transfer-uuid",  
-  "chunkIndex": 0,             // 从 0 开始  
-  "chunkSize": 65536,          // 建议每片 64KB  
-  "content": "BASE64\_DATA...", // 分片内容的 Base64  
-  "isLast": false  
-}
-
-### **4.3 FILE\_TRANSFER\_STATUS (状态控制)**
-
-用于传输中途的取消、暂停或成功确认。
-
-* **data 结构**:
-
-{  
-  "transferId": "unique-transfer-uuid",  
-  "status": "SUCCESS | CANCEL | ERROR",  
-  "message": "Optional error info"  
-}
-
-## **5\. 业务逻辑约束**
-
-### **5.1 回环防止 (Loopback Prevention)**
-
-* **ID 校验**: 接收端必须记录自身的 Device-Unique-ID。  
-* **丢弃逻辑**: 若收到的消息 senderId 与自身相同，**必须**丢弃该消息，严禁写入本地剪切板，防止产生死循环。
-
-### **5.2 方向控制 (Direction Control)**
-
-* **仅发送模式**: 监听到本地剪切板变化时发送消息，但不处理接收到的 CLIPBOARD\_SYNC。  
-* **仅接收模式**: 处理接收到的消息并写入剪切板，但不监听本地剪切板变化。
-
-### **5.3 分片传输细节 (Chunking Strategy)**
-
-* **并发控制**: 同一时间只允许进行一个 transferId 的文件传输。  
-* **流控**: 发送方在发送高频分片时，应观察 WebSocket 缓冲区状态，避免阻塞 HEARTBEAT 消息。  
-* **临时存储**: 接收端应将分片写入临时文件目录（HarmonyOS 的 cache 目录），校验完整性后再移动到正式目录或写入剪切板。
-
-### **5.4 兼容性说明**
-
-* **增量更新**: V1.1 客户端能通过 capabilities 识别对方是否支持文件传输。  
-* **向下兼容**: 若 V1.1 客户端连接到 V1.0 服务端，由于服务端不发送 FILE\_TRANSFER\_\* 动作，客户端将仅退化为文本和图片同步模式。
-
-## **6\. 错误处理**
-
-* **超时**: 若 FILE\_TRANSFER\_START 后 30 秒内未收到后续分片，接收端应自动销毁该传输任务并清理临时文件。  
-* **校验失败**: 若最终合并的文件 fileHash 与起始消息不符，应提示用户并标记为错误。

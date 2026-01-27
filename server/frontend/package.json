@@ -9,13 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "vue": "^3.2.37"
   },
   "devDependencies": {
+    "@babel/types": "^7.18.10",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^3.0.3",
     "typescript": "^4.6.4",
     "vite": "^3.0.7",
-    "vue-tsc": "^1.8.27",
-    "@babel/types": "^7.18.10"
+    "vue-tsc": "^1.8.27"
   }
 }

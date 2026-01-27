@@ -35,7 +35,9 @@ func main() {
 	server := NewRelayServer()
 
 	// 设置路由
+	// 设置路由
 	http.HandleFunc("/ws/", server.HandleWebSocket)
+	http.HandleFunc("/v2/ws/", server.HandleWebSocketV2)
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/health", handleHealth)
 
@@ -43,7 +45,8 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", *host, *port)
 	log.Printf("🚀 NextPaste 中继服务器启动")
 	log.Printf("📡 监听地址: %s", addr)
-	log.Printf("🔗 连接格式: ws://%s/ws/<roomID>", addr)
+	log.Printf("🔗 V1 连接 (旧版): ws://%s/ws/<roomID>", addr)
+	log.Printf("🔗 V2 连接 (推荐): ws://%s/v2/ws/<roomID>", addr)
 	log.Printf("💡 提示: 使用 Ctrl+C 停止服务器\n")
 
 	// 启动 HTTP 服务器
@@ -88,9 +91,18 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
     
     <div class="info">
         <h3>连接方式</h3>
-        <p>WebSocket URL: <code>ws://` + r.Host + `/ws/&lt;roomID&gt;</code></p>
-        <p>示例: <code>ws://` + r.Host + `/ws/my-room-123</code></p>
+        <p>V1 URL (兼容): <code id="v1-url"></code></p>
+        <p>V2 URL (二进制): <code id="v2-url"></code></p>
+        <p>示例: <code id="example-url"></code></p>
     </div>
+    
+    <script>
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const host = window.location.host;
+        document.getElementById('v1-url').innerText = protocol + "://" + host + "/ws/<roomID>";
+        document.getElementById('v2-url').innerText = protocol + "://" + host + "/v2/ws/<roomID>";
+        document.getElementById('example-url').innerText = protocol + "://" + host + "/v2/ws/my-room-123";
+    </script>
     
     <div class="info">
         <h3>功能说明</h3>
@@ -98,6 +110,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
             <li>支持无限数量的房间</li>
             <li>同一房间内的客户端可以互相共享剪贴板</li>
             <li>不同房间之间完全隔离</li>
+            <li>V2 协议支持二进制流高效传输</li>
             <li>兼容 NextPaste 协议（HANDSHAKE、CLIPBOARD_SYNC、HEARTBEAT）</li>
         </ul>
     </div>
@@ -115,4 +128,3 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"ok","service":"nextpaste-relay"}`))
 }
-

@@ -34,6 +34,11 @@ export struct CustomInput {
   onValueChanged?: (value: string) => void;
 
   /**
+   * 右侧操作按钮构建器
+   */
+  @BuilderParam actionButton?: () => void;
+
+  /**
    * 内部状态
    */
   @State private innerValue: string = '';
@@ -62,29 +67,39 @@ export struct CustomInput {
           .width('100%')
       }
       
-      // 输入框
-      TextInput({
-        text: this.innerValue,
-        placeholder: this.placeholder
-      })
-        .type(this.inputType)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
-        .backgroundColor($r('app.color.input_background'))
-        .borderRadius(8)
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-        .border({
-          width: 1,
-          color: $r('app.color.input_border')
+      Row({ space: 8 }) {
+        // 输入框
+        TextInput({
+          text: this.innerValue,
+          placeholder: this.placeholder
         })
-        .enabled(!this.disabled)
-        .opacity(this.disabled ? 0.5 : 1)
-        .onChange((value: string) => {
-          this.innerValue = value;
-          if (this.onValueChanged) {
-            this.onValueChanged(value);
-          }
-        })
+          .layoutWeight(1)
+          .type(this.inputType)
+          .fontSize(16)
+          .fontColor($r('app.color.text_primary'))
+          .backgroundColor($r('app.color.input_background'))
+          .borderRadius(8)
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          .border({
+            width: 1,
+            color: $r('app.color.input_border')
+          })
+          .enabled(!this.disabled)
+          .opacity(this.disabled ? 0.5 : 1)
+          .onChange((value: string) => {
+            this.innerValue = value;
+            if (this.onValueChanged) {
+              this.onValueChanged(value);
+            }
+          })
+
+        // 右侧操作按钮
+        if (this.actionButton) {
+          this.actionButton()
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

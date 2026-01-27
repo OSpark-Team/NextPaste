@@ -2,17 +2,18 @@ package websocket
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"server/internal/protocol"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-// WSClient WebSocket 客户端
+// WSClient WebSocket 客户端（V1.1 二进制协议版本）
 type WSClient struct {
 	url               string
 	conn              *websocket.Conn
@@ -21,29 +22,36 @@ type WSClient struct {
 	isConnected       bool
 	everConnected     bool // 是否曾经连接成功过
 	mu                sync.RWMutex
-	clientID          string
 	deviceName        string
 	platform          string
 	logCb             LogCallback
-	clipboardCallback ClipboardCallback
+	clipboardCallback BinaryClipboardCallback
 	onConnected       func() // 连接成功回调
 	reconnectInterval time.Duration
 	heartbeatInterval time.Duration
+
+	// V1.1 二进制协议管理器
+	protocolMgr *protocol.BinaryProtocolManager
+
+	// 分片重组缓冲区
+	PendingMsgID  uint32
+	PendingBuffer []byte
+	PendingMeta   *protocol.TransferMeta
 }
 
 // NewWSClient 创建 WebSocket 客户端
 func NewWSClient(deviceName, platform string) *WSClient {
 	return &WSClient{
-		clientID:          uuid.New().String(),
 		deviceName:        deviceName,
 		platform:          platform,
 		reconnectInterval: 5 * time.Second,
 		heartbeatInterval: 30 * time.Second,
+		protocolMgr:       protocol.NewBinaryProtocolManager(),
 	}
 }
 
-// SetClipboardCallback 设置剪贴板数据回调
-func (c *WSClient) SetClipboardCallback(cb ClipboardCallback) {
+// SetClipboardCallback 设置剪贴板数据回调（V1.1）
+func (c *WSClient) SetClipboardCallback(cb BinaryClipboardCallback) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.clipboardCallback = cb
@@ -150,7 +158,7 @@ func (c *WSClient) doConnect() error {
 
 	c.log("SUCCESS", "连接成功")
 
-	// 发送握手消息
+	// 发送握手消息（V1.1 二进制协议）
 	if err := c.sendHandshake(); err != nil {
 		c.log("ERROR", fmt.Sprintf("发送握手消息失败: %v", err))
 		conn.Close()
@@ -174,22 +182,16 @@ func (c *WSClient) doConnect() error {
 	return nil
 }
 
-// sendHandshake 发送握手消息
+// sendHandshake 发送握手消息（V1.1 二进制协议）
 func (c *WSClient) sendHandshake() error {
-	payload := protocol.HandshakePayload{
-		DeviceName: c.deviceName,
-		Platform:   c.platform,
-	}
-
-	msg, err := protocol.CreateMessage(protocol.ActionHandshake, c.clientID, payload)
+	data, err := c.protocolMgr.CreateHandshake(c.deviceName, c.platform)
 	if err != nil {
 		return err
 	}
-
-	return c.sendMessage(msg)
+	return c.sendBinaryData(data)
 }
 
-// readPump 读取服务器消息
+// readPump 读取服务器消息（V1.1 二进制协议）
 func (c *WSClient) readPump() {
 	defer func() {
 		c.mu.Lock()
@@ -213,7 +215,7 @@ func (c *WSClient) readPump() {
 				return
 			}
 
-			_, message, err := conn.ReadMessage()
+			messageType, message, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					c.log("ERROR", fmt.Sprintf("连接异常断开: %v", err))
@@ -221,12 +223,18 @@ func (c *WSClient) readPump() {
 				return
 			}
 
-			c.handleMessage(message)
+			// V1.1 二进制协议：只处理二进制消息
+			if messageType != websocket.BinaryMessage {
+				c.log("WARNING", "收到非二进制消息，不兼容的协议版本")
+				continue
+			}
+
+			c.handleBinaryMessage(message)
 		}
 	}
 }
 
-// heartbeatPump 发送心跳
+// heartbeatPump 发送心跳（V1.1 二进制协议）
 func (c *WSClient) heartbeatPump() {
 	ticker := time.NewTicker(c.heartbeatInterval)
 	defer ticker.Stop()
@@ -244,57 +252,130 @@ func (c *WSClient) heartbeatPump() {
 	}
 }
 
-// sendHeartbeat 发送心跳消息
+// sendHeartbeat 发送心跳消息（V1.1 二进制协议）
 func (c *WSClient) sendHeartbeat() error {
-	payload := protocol.HeartbeatPayload{}
-	msg, err := protocol.CreateMessage(protocol.ActionHeartbeat, c.clientID, payload)
-	if err != nil {
-		return err
-	}
-	return c.sendMessage(msg)
+	data := c.protocolMgr.CreateHeartbeat()
+	return c.sendBinaryData(data)
 }
 
-// handleMessage 处理服务器消息
-func (c *WSClient) handleMessage(data []byte) {
-	msg, err := protocol.ParseMessage(data)
+// handleBinaryMessage 处理二进制消息（V1.1）
+func (c *WSClient) handleBinaryMessage(data []byte) {
+	msg, err := c.protocolMgr.Parse(data)
 	if err != nil {
-		c.log("ERROR", fmt.Sprintf("解析消息失败: %v", err))
+		// 回环消息静默忽略
+		if errors.Is(err, protocol.ErrLoopbackDetected) {
+			return
+		}
+		c.log("ERROR", fmt.Sprintf("解析二进制消息失败: %v", err))
 		return
 	}
 
-	// 忽略来自自己的消息（回环检测）
-	if msg.SenderID == c.clientID {
-		return
-	}
-
-	switch msg.Action {
-	case protocol.ActionClipboardSync:
-		c.handleClipboardSync(msg)
-	case protocol.ActionHeartbeat:
+	switch msg.Type {
+	case protocol.TypeText:
+		c.handleBinaryText(msg)
+	case protocol.TypeImage:
+		c.handleBinaryImage(msg)
+	case protocol.TypeHeartbeat:
 		// 心跳消息不需要处理
+	case protocol.TypeHandshake:
+		// 收到握手响应
+		c.log("INFO", "收到握手响应")
 	default:
-		c.log("WARNING", fmt.Sprintf("未知的消息类型: %s", msg.Action))
+		c.log("WARNING", fmt.Sprintf("未知的消息类型: 0x%02X", msg.Type))
 	}
 }
 
-// handleClipboardSync 处理剪贴板同步消息
-func (c *WSClient) handleClipboardSync(msg *protocol.SyncMessage) {
-	payload, err := protocol.ParseClipboardPayload(msg.Data)
-	if err != nil {
-		c.log("ERROR", fmt.Sprintf("解析剪贴板消息失败: %v", err))
-		return
-	}
-
-	c.log("INFO", fmt.Sprintf("收到剪贴板数据 [%s]", payload.Type))
+// handleBinaryText 处理文本消息（V1.1）
+func (c *WSClient) handleBinaryText(msg *protocol.BinaryMessage) {
+	text := msg.GetTextContent()
+	c.log("INFO", fmt.Sprintf("收到文本数据 [%d 字符]", len(text)))
 
 	// 调用回调函数（通知 App 层写入本地剪贴板）
 	if c.clipboardCallback != nil {
-		c.clipboardCallback(*payload)
+		c.clipboardCallback("text", []byte(text))
 	}
 }
 
-// SendClipboard 发送剪贴板数据
-func (c *WSClient) SendClipboard(dataType, content string) error {
+// handleBinaryImage 处理图片消息（V1.1）
+func (c *WSClient) handleBinaryImage(msg *protocol.BinaryMessage) {
+	var fullData []byte
+	var finished bool
+
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		// 检查是否是分片消息
+		isPending := c.PendingBuffer != nil
+
+		// 如果包含元数据（首帧）
+		if (msg.Flags & protocol.FlagHasMeta) != 0 {
+			if isPending {
+				c.log("WARNING", "未完成上一次传输就开始新传输，丢弃旧数据")
+			}
+
+			// 初始化缓冲区
+			c.PendingMsgID = msg.MsgID
+			c.PendingMeta = msg.Meta
+
+			expectedSize := int(0)
+			if msg.Meta != nil {
+				expectedSize = int(msg.Meta.Size)
+			}
+			// 限制预分配大小，防止 OOM
+			if expectedSize > 100*1024*1024 {
+				expectedSize = 100 * 1024 * 1024
+			}
+			c.PendingBuffer = make([]byte, 0, expectedSize)
+
+			// 追加数据（BinaryData 是剥离元数据后的）
+			if msg.BinaryData != nil {
+				c.PendingBuffer = append(c.PendingBuffer, msg.BinaryData...)
+			} else {
+				c.PendingBuffer = append(c.PendingBuffer, msg.Payload...)
+			}
+		} else {
+			// 后续分片
+			if !isPending {
+				return
+			}
+			if msg.MsgID != c.PendingMsgID {
+				c.PendingBuffer = nil
+				c.PendingMeta = nil
+				return
+			}
+			c.PendingBuffer = append(c.PendingBuffer, msg.Payload...)
+		}
+
+		// 检查是否还有后续分片
+		if (msg.Flags & protocol.FlagMF) != 0 {
+			return
+		}
+
+		// 传输完成
+		fullData = c.PendingBuffer
+
+		// 清理缓冲区
+		c.PendingBuffer = nil
+		c.PendingMeta = nil
+		finished = true
+	}()
+
+	if finished {
+		sizeMB := float64(len(fullData)) / 1024 / 1024
+		c.log("INFO", fmt.Sprintf("收到完整图片数据 [%.2f MB]", sizeMB))
+
+		// 调用回调函数（通知 App 层写入本地剪贴板）
+		if c.clipboardCallback != nil {
+			c.clipboardCallback("image", fullData)
+		}
+	}
+}
+
+// SendClipboardBinary 发送剪贴板数据（V1.1 二进制协议）
+// dataType: "text" 或 "image"
+// content: 对于文本是字符串字节，对于图片是原始二进制数据
+func (c *WSClient) SendClipboardBinary(dataType string, content []byte) error {
 	c.mu.RLock()
 	if !c.isConnected {
 		c.mu.RUnlock()
@@ -304,27 +385,45 @@ func (c *WSClient) SendClipboard(dataType, content string) error {
 
 	c.log("INFO", fmt.Sprintf("发送剪贴板数据: %s", dataType))
 
-	payload := protocol.ClipboardPayload{
-		Type:     protocol.DataType(dataType),
-		MimeType: getMimeType(dataType),
-		Content:  content,
+	var data []byte
+	var err error
+
+	switch dataType {
+	case "text":
+		data, err = c.protocolMgr.CreateText(string(content))
+	case "image":
+		data, err = c.protocolMgr.CreateImageFrame(content, "image/png")
+	default:
+		return fmt.Errorf("不支持的数据类型: %s", dataType)
 	}
 
-	msg, err := protocol.CreateMessage(protocol.ActionClipboardSync, c.clientID, payload)
 	if err != nil {
 		return err
 	}
 
-	return c.sendMessage(msg)
+	return c.sendBinaryData(data)
 }
 
-// sendMessage 发送消息
-func (c *WSClient) sendMessage(msg *protocol.SyncMessage) error {
-	data, err := msg.ToJSON()
-	if err != nil {
-		return err
+// SendClipboard 发送剪贴板数据（兼容旧接口，内部将 Base64 转为二进制）
+// 注意：此方法保留用于兼容，推荐使用 SendClipboardBinary
+func (c *WSClient) SendClipboard(dataType, content string) error {
+	switch dataType {
+	case "text":
+		return c.SendClipboardBinary("text", []byte(content))
+	case "image":
+		// content 是 Base64 编码的图片，需要解码
+		imageData, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return fmt.Errorf("Base64 解码失败: %w", err)
+		}
+		return c.SendClipboardBinary("image", imageData)
+	default:
+		return fmt.Errorf("不支持的数据类型: %s", dataType)
 	}
+}
 
+// sendBinaryData 发送二进制数据
+func (c *WSClient) sendBinaryData(data []byte) error {
 	c.mu.RLock()
 	conn := c.conn
 	c.mu.RUnlock()
@@ -334,7 +433,7 @@ func (c *WSClient) sendMessage(msg *protocol.SyncMessage) error {
 	}
 
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	return conn.WriteMessage(websocket.TextMessage, data)
+	return conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
 // IsConnected 检查是否已连接

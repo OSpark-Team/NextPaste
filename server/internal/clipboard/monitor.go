@@ -3,18 +3,17 @@ package clipboard
 import (
 	"context"
 	"crypto/md5"
-	"encoding/base64"
 	"fmt"
 	"sync"
 
 	"golang.design/x/clipboard"
 )
 
-// ClipboardData 定义剪贴板统一数据结构
+// ClipboardData 定义剪贴板统一数据结构（V1.1 二进制协议版本）
 type ClipboardData struct {
 	Type     string // 类型: "text" 或 "image"
 	MimeType string // MIME 类型: "text/plain" 或 "image/png"
-	Content  string // 文本内容或 Base64 编码后的图片数据
+	Content  []byte // 原始二进制数据（不再使用 Base64 编码）
 }
 
 // ChangeCallback 剪贴板数据变化时的回调函数
@@ -73,27 +72,21 @@ func (m *Monitor) Stop() {
 	}
 }
 
-// SetClipboard 更新系统剪贴板内容并同步更新内部哈希值
+// SetClipboard 更新系统剪贴板内容并同步更新内部哈希值（V1.1 二进制版本）
+// content: 原始二进制数据（对于图片，是 PNG 格式的二进制数据）
 func (m *Monitor) SetClipboard(data ClipboardData) error {
-	var content []byte
 	var format clipboard.Format
 
 	switch data.Type {
 	case "text":
-		content = []byte(data.Content)
 		format = clipboard.FmtText
 	case "image":
-		imageData, err := base64.StdEncoding.DecodeString(data.Content)
-		if err != nil {
-			return fmt.Errorf("failed to decode image: %w", err)
-		}
-		content = imageData
 		format = clipboard.FmtImage
 	default:
 		return fmt.Errorf("unsupported type: %s", data.Type)
 	}
 
-	newHash := m.calcHash(content)
+	newHash := m.calcHash(data.Content)
 	m.mu.Lock()
 	if data.Type == "text" {
 		m.lastTextHash = newHash
@@ -102,7 +95,7 @@ func (m *Monitor) SetClipboard(data ClipboardData) error {
 	}
 	m.mu.Unlock()
 
-	clipboard.Write(format, content)
+	clipboard.Write(format, data.Content)
 	return nil
 }
 
@@ -133,7 +126,7 @@ func (m *Monitor) watchText() {
 				m.callback(ClipboardData{
 					Type:     "text",
 					MimeType: "text/plain",
-					Content:  string(data),
+					Content:  data, // V1.1: 直接传递原始字节
 				})
 			}
 		}
@@ -167,7 +160,7 @@ func (m *Monitor) watchImage() {
 				m.callback(ClipboardData{
 					Type:     "image",
 					MimeType: "image/png",
-					Content:  base64.StdEncoding.EncodeToString(data),
+					Content:  data, // V1.1: 直接传递原始二进制，不再 Base64 编码
 				})
 			}
 		}

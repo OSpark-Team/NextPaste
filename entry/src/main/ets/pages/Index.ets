@@ -11,8 +11,8 @@ import Want from '@ohos.app.ability.Want';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
 import { fileIo } from '@kit.CoreFileKit';
-import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { scanBarcode, scanCore } from '@kit.ScanKit';
 
 /**
  * 主页面
@@ -199,29 +199,19 @@ import { BusinessError } from '@kit.BasicServicesKit';
       const fileSizeKB = fileSize / 1024;
       const fileSizeMB = fileSizeKB / 1024;
 
-      // 检查文件大小限制（3.5MB）
-      const SIZE_LIMIT = 3.5 * 1024 * 1024; // 3.5MB
-      if (fileSize > SIZE_LIMIT) {
-        fileIo.closeSync(file);
-        this.viewModel.addLog(LogLevel.ERROR, `图片过大 (${fileSizeMB.toFixed(2)} MB)，当前版本不支持超过 3.5MB 的图片`);
-        this.getUIContext()?.getPromptAction().showToast({
-          message: `图片过大 (${fileSizeMB.toFixed(2)} MB)\n当前版本不支持超过 3.5MB 的图片`,
-          duration: 3000
-        });
-        return;
-      }
+
 
       // 创建 ImageSource 并转换为 PixelMap
       const imageSourceApi = image.createImageSource(file.fd);
       const pixelMap = await imageSourceApi.createPixelMap();
       fileIo.closeSync(file);
 
-      // 转换为 Base64（PNG 格式，quality 100）
+      // V1.1 二进制协议：直接传输 PNG 二进制数据（无需 Base64 编码）
       this.viewModel.addLog(LogLevel.INFO, '正在编码图片...');
-      const base64 = await this.encodeImageToBase64(pixelMap);
+      const pngData = await this.encodeImageToArrayBuffer(pixelMap);
 
-      // 发送图片
-      const sent = await this.controller.getWebSocketManager().sendImage(base64);
+      // 发送图片（二进制帧）
+      const sent = await this.controller.getWebSocketManager().sendImage(pngData);
       if (sent) {
         this.viewModel.addLog(LogLevel.SUCCESS, '图片发送成功');
         this.getUIContext()?.getPromptAction().showToast({
@@ -247,25 +237,19 @@ import { BusinessError } from '@kit.BasicServicesKit';
   }
 
   /**
-   * 编码图片为 Base64
+   * 编码图片为 ArrayBuffer（V1.1 二进制协议）
    * @param pixelMap PixelMap 对象
-   * @returns Base64 字符串
+   * @returns PNG 格式的 ArrayBuffer
    */
-  private async encodeImageToBase64(pixelMap: image.PixelMap): Promise<string> {
+  private async encodeImageToArrayBuffer(pixelMap: image.PixelMap): Promise<ArrayBuffer> {
     const imagePackerApi = image.createImagePacker();
     const packOpts: image.PackingOption = {
       format: 'image/png',
       quality: 100
     };
 
-    const arrayBuffer = await imagePackerApi.packToData(pixelMap, packOpts);
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    // 使用 util.Base64Helper 进行 Base64 编码
-    const base64Helper = new util.Base64Helper();
-    const base64 = base64Helper.encodeToStringSync(uint8Array);
-
-    return base64;
+    // 直接返回 ArrayBuffer，无需 Base64 编码
+    return await imagePackerApi.packToData(pixelMap, packOpts);
   }
 
   /**
@@ -276,6 +260,49 @@ import { BusinessError } from '@kit.BasicServicesKit';
       return this.viewModel.logs;
     }
     return this.viewModel.logs.filter(log => log.level === this.logFilter);
+  }
+
+  /**
+   * 启动扫码
+   */
+  private startScan(): void {
+    try {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const options: scanBarcode.ScanOptions = {
+        scanTypes: [scanCore.ScanType.QR_CODE],
+        enableMultiMode: true,
+        enableAlbum: true
+      };
+      
+      scanBarcode.startScanForResult(context, options)
+        .then((result: scanBarcode.ScanResult) => {
+          if (result.originalValue) {
+            this.viewModel.serverAddress = result.originalValue;
+            this.serverAddress = result.originalValue;
+          }
+        })
+        .catch((error: BusinessError) => {
+          console.error(`扫码失败: code=${error.code}, message=${error.message}`);
+        });
+    } catch (error) {
+       console.error(`扫码异常: ${JSON.stringify(error)}`);
+    }
+  }
+
+  @Builder
+  buildScanButton() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      SymbolGlyph($r('sys.symbol.camera'))
+        .fontSize(24)
+        .fontColor([$r('app.color.text_primary')])
+    }
+    .width(48)
+    .height(48)
+    .borderRadius(8)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.startScan();
+    })
   }
 
   build() {
@@ -430,6 +457,9 @@ import { BusinessError } from '@kit.BasicServicesKit';
             disabled: this.viewModel.isRunning,
             onValueChanged: (value: string) => {
               this.viewModel.serverAddress = value;
+            },
+            actionButton: () => {
+              this.buildScanButton()
             }
           })
 
