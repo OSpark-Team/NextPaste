@@ -30,16 +30,23 @@ export interface ClipboardData {
    * 数据类型
    */
   type: ClipboardDataType;
-  
+
   /**
    * 文本内容（当类型为 TEXT 时）
    */
   text?: string;
-  
+
   /**
    * Base64 编码的图片数据（当类型为 IMAGE 时）
+   * @deprecated 推荐使用 imageBytes 以减少编码/解码开销
    */
   imageBase64?: string;
+
+  /**
+   * 图片二进制数据（当类型为 IMAGE 时）
+   * V1.1 二进制协议推荐使用此字段以避免 Base64 转换开销
+   */
+  imageBytes?: ArrayBuffer;
 }
 
 /**
@@ -201,12 +208,13 @@ export class ClipboardMonitor {
       const pixelMap = record.pixelMap;
 
       if (pixelMap && this.changeCallback) {
-        // 将 PixelMap 转换为 Base64
-        const base64 = await this.pixelMapToBase64(pixelMap);
-        if (base64) {
+        // 直接返回 ArrayBuffer，避免 Base64 转换开销
+        // V1.1 二进制协议可以直接使用 ArrayBuffer
+        const arrayBuffer = await this.pixelMapToArrayBuffer(pixelMap);
+        if (arrayBuffer) {
           const clipboardData: ClipboardData = {
             type: ClipboardDataType.IMAGE,
-            imageBase64: base64
+            imageBytes: arrayBuffer
           };
           this.changeCallback(clipboardData);
         }
@@ -217,11 +225,11 @@ export class ClipboardMonitor {
   }
 
   /**
-   * 将 PixelMap 转换为 Base64 字符串
+   * 将 PixelMap 转换为 ArrayBuffer
    * @param pixelMap PixelMap 对象
-   * @returns Base64 字符串
+   * @returns ArrayBuffer
    */
-  private async pixelMapToBase64(pixelMap: image.PixelMap): Promise<string> {
+  private async pixelMapToArrayBuffer(pixelMap: image.PixelMap): Promise<ArrayBuffer> {
     try {
       const imagePackerApi = image.createImagePacker();
       const packOpts: image.PackingOption = {
@@ -229,17 +237,11 @@ export class ClipboardMonitor {
         quality: 100
       };
 
-      const arrayBuffer = await imagePackerApi.packToData(pixelMap, packOpts);
-      const uint8Array = new Uint8Array(arrayBuffer);
-
-      // 使用 util.Base64Helper 进行 Base64 编码
-      const base64Helper = new util.Base64Helper();
-      const base64 = base64Helper.encodeToStringSync(uint8Array);
-
-      return base64;
+      // 直接返回 ArrayBuffer，无需 Base64 编码
+      return await imagePackerApi.packToData(pixelMap, packOpts);
     } catch (error) {
-      console.error('PixelMap 转 Base64 失败:', JSON.stringify(error));
-      return '';
+      console.error('PixelMap 转 ArrayBuffer 失败:', JSON.stringify(error));
+      return new ArrayBuffer(0);
     }
   }
 
@@ -253,8 +255,15 @@ export class ClipboardMonitor {
 
       if (data.type === ClipboardDataType.TEXT && data.text) {
         pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, data.text);
+      } else if (data.type === ClipboardDataType.IMAGE && data.imageBytes) {
+        // 直接使用 ArrayBuffer，避免 Base64 解码开销
+        const pixelMap = await this.arrayBufferToPixelMap(data.imageBytes);
+        if (!pixelMap) {
+          return false;
+        }
+        pasteData = pasteboard.createData(pasteboard.MIMETYPE_PIXELMAP, pixelMap);
       } else if (data.type === ClipboardDataType.IMAGE && data.imageBase64) {
-        // 将 Base64 转换为 PixelMap
+        // 兼容旧版 Base64 格式
         const pixelMap = await this.base64ToPixelMap(data.imageBase64);
         if (!pixelMap) {
           return false;
@@ -275,6 +284,23 @@ export class ClipboardMonitor {
       // 重置标记
       this.isSelfUpdate = false;
       return false;
+    }
+  }
+
+  /**
+   * 将 ArrayBuffer 转换为 PixelMap
+   * @param arrayBuffer ArrayBuffer
+   * @returns PixelMap 对象
+   */
+  private async arrayBufferToPixelMap(arrayBuffer: ArrayBuffer): Promise<image.PixelMap | null> {
+    try {
+      const imageSourceApi = image.createImageSource(arrayBuffer);
+      const pixelMap = await imageSourceApi.createPixelMap();
+
+      return pixelMap;
+    } catch (error) {
+      console.error('ArrayBuffer 转 PixelMap 失败:', JSON.stringify(error));
+      return null;
     }
   }
 

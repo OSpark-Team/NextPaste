@@ -1,10 +1,11 @@
-import { common } from '@kit.AbilityKit';
-import { util } from '@kit.ArkTS';
-import { ClipboardViewModel } from './ClipboardViewModel';
-import { ClipboardMonitor, ClipboardData, ClipboardDataType } from '../services/ClipboardMonitor';
-import { WebSocketManager } from '../services/WebSocketManager';
-import { DeviceMode, ConnectionStatus, LogLevel } from '../models/AppConfig';
-import { BinaryMessage, MessageType, TransferMeta } from '../protocol/BinaryProtocol';
+import { common } from "@kit.AbilityKit";
+import { util } from "@kit.ArkTS";
+import { ClipboardViewModel } from "./ClipboardViewModel";
+import { ClipboardMonitor, ClipboardData, ClipboardDataType } from "../services/ClipboardMonitor";
+import { WebSocketManager } from "../services/WebSocketManager";
+import { DeviceMode, ConnectionStatus, LogLevel } from "../models/AppConfig";
+import { BinaryMessage, MessageType, TransferMeta } from "../protocol/BinaryProtocol";
+import { BackgroundTaskManager } from "../services/BackgroundTaskManager";
 
 /**
  * 剪切板同步控制器（V1.1 二进制协议版本）
@@ -14,6 +15,7 @@ export class ClipboardController {
   private viewModel: ClipboardViewModel;
   private clipboardMonitor: ClipboardMonitor;
   private webSocketManager: WebSocketManager;
+  private backgroundTaskManager: BackgroundTaskManager = new BackgroundTaskManager();
   private context: common.UIAbilityContext | null = null;
   // 文本解码器，用于解析二进制消息中的文本
   private textDecoder: util.TextDecoder = new util.TextDecoder();
@@ -22,6 +24,7 @@ export class ClipboardController {
     this.viewModel = viewModel;
     this.clipboardMonitor = new ClipboardMonitor();
     this.webSocketManager = new WebSocketManager();
+    this.backgroundTaskManager = new BackgroundTaskManager();
 
     this.setupWebSocketCallbacks();
   }
@@ -32,6 +35,7 @@ export class ClipboardController {
    */
   public init(context: common.UIAbilityContext): void {
     this.context = context;
+    this.backgroundTaskManager.init(context);
   }
 
   /**
@@ -42,10 +46,26 @@ export class ClipboardController {
     this.webSocketManager.setConnectionStatusCallback((connected: boolean) => {
       if (connected) {
         this.viewModel.connectionStatus = ConnectionStatus.CONNECTED;
-        this.viewModel.addLog(LogLevel.SUCCESS, '已连接到服务器');
+        this.viewModel.addLog(LogLevel.SUCCESS, "已连接到服务器");
+        // 启动后台任务
+        this.backgroundTaskManager.startBackgroundTask().then((started: boolean) => {
+          if (started) {
+            console.log("后台任务已启动");
+          } else {
+            console.log("启动后台任务失败");
+          }
+        });
       } else {
         this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
-        this.viewModel.addLog(LogLevel.WARNING, '已断开连接');
+        this.viewModel.addLog(LogLevel.WARNING, "已断开连接");
+        // 关闭后台任务
+        this.backgroundTaskManager.stopBackgroundTask().then((stopped: boolean) => {
+          if (stopped) {
+            console.log("后台任务已停止");
+          } else {
+            console.log("停止后台任务失败");
+          }
+        });
       }
     });
 
@@ -66,24 +86,26 @@ export class ClipboardController {
   public async start(): Promise<boolean> {
     // 验证服务器地址
     if (!this.viewModel.validateServerAddress(this.viewModel.serverAddress)) {
-      this.viewModel.addLog(LogLevel.ERROR, '服务器地址格式不正确');
+      this.viewModel.addLog(LogLevel.ERROR, "服务器地址格式不正确");
       return false;
     }
 
     // 连接 WebSocket
     this.viewModel.connectionStatus = ConnectionStatus.CONNECTING;
-    this.viewModel.addLog(LogLevel.INFO, '正在连接服务器...');
+    this.viewModel.addLog(LogLevel.INFO, "正在连接服务器...");
 
     const connected = await this.webSocketManager.connect(this.viewModel.serverAddress);
     if (!connected) {
-      this.viewModel.addLog(LogLevel.ERROR, '连接服务器失败');
+      this.viewModel.addLog(LogLevel.ERROR, "连接服务器失败");
       this.viewModel.connectionStatus = ConnectionStatus.DISCONNECTED;
       return false;
     }
 
     // 根据模式启动剪切板监听
-    if (this.viewModel.deviceMode === DeviceMode.SEND_ONLY ||
-        this.viewModel.deviceMode === DeviceMode.BIDIRECTIONAL) {
+    if (
+      this.viewModel.deviceMode === DeviceMode.SEND_ONLY ||
+      this.viewModel.deviceMode === DeviceMode.BIDIRECTIONAL
+    ) {
       this.startClipboardMonitoring();
     }
 
@@ -112,7 +134,7 @@ export class ClipboardController {
     this.clipboardMonitor.startMonitoring((data: ClipboardData) => {
       this.handleClipboardChange(data);
     });
-    this.viewModel.addLog(LogLevel.INFO, '已启动剪切板监听');
+    this.viewModel.addLog(LogLevel.INFO, "已启动剪切板监听");
   }
 
   /**
@@ -120,7 +142,7 @@ export class ClipboardController {
    * @param data 剪切板数据
    */
   private async handleClipboardChange(data: ClipboardData): Promise<void> {
-    this.viewModel.addLog(LogLevel.INFO, '检测到剪切板变化');
+    this.viewModel.addLog(LogLevel.INFO, "检测到剪切板变化");
 
     if (data.type === ClipboardDataType.TEXT && data.text) {
       // 文本消息使用 V1.1 二进制协议发送
@@ -128,24 +150,16 @@ export class ClipboardController {
       if (sent) {
         this.viewModel.addLog(LogLevel.SUCCESS, `已发送文本数据 (${data.text.length} 字符)`);
       } else {
-        this.viewModel.addLog(LogLevel.ERROR, '发送文本数据失败');
+        this.viewModel.addLog(LogLevel.ERROR, "发送文本数据失败");
       }
-    } else if (data.type === ClipboardDataType.IMAGE && data.imageBase64) {
-      // 注意：ClipboardMonitor 目前仍然输出 Base64 格式
-      // 需要将 Base64 转换回 ArrayBuffer 以使用 V1.1 二进制协议
-      try {
-        const base64Helper = new util.Base64Helper();
-        const uint8Array = base64Helper.decodeSync(data.imageBase64);
-        const arrayBuffer = uint8Array.buffer as ArrayBuffer;
-
-        const sent = await this.webSocketManager.sendImage(arrayBuffer);
-        if (sent) {
-          this.viewModel.addLog(LogLevel.SUCCESS, '已发送图片数据（二进制协议）');
-        } else {
-          this.viewModel.addLog(LogLevel.ERROR, '发送图片数据失败');
-        }
-      } catch (error) {
-        this.viewModel.addLog(LogLevel.ERROR, `图片数据转换失败: ${JSON.stringify(error)}`);
+    } else if (data.type === ClipboardDataType.IMAGE && data.imageBytes) {
+      // V1.1 二进制协议：直接使用 ArrayBuffer，无需 Base64 转换
+      const sent = await this.webSocketManager.sendImage(data.imageBytes);
+      if (sent) {
+        const sizeMB = (data.imageBytes.byteLength / 1024 / 1024).toFixed(2);
+        this.viewModel.addLog(LogLevel.SUCCESS, `已发送图片数据（二进制协议，${sizeMB} MB）`);
+      } else {
+        this.viewModel.addLog(LogLevel.ERROR, "发送图片数据失败");
       }
     }
   }
@@ -170,7 +184,7 @@ export class ClipboardController {
         break;
 
       case MessageType.HANDSHAKE:
-        this.viewModel.addLog(LogLevel.INFO, '收到握手响应');
+        this.viewModel.addLog(LogLevel.INFO, "收到握手响应");
         break;
 
       case MessageType.HEARTBEAT:
@@ -191,18 +205,18 @@ export class ClipboardController {
       // 将载荷解码为 UTF-8 文本
       const text = this.textDecoder.decodeToString(message.payload);
 
-      this.viewModel.addLog(LogLevel.INFO, '接收到文本数据');
+      this.viewModel.addLog(LogLevel.INFO, "接收到文本数据");
 
       const clipboardData: ClipboardData = {
         type: ClipboardDataType.TEXT,
-        text: text
+        text: text,
       };
 
       const success = await this.clipboardMonitor.setClipboardData(clipboardData);
       if (success) {
         this.viewModel.addLog(LogLevel.SUCCESS, `已更新剪切板 (${text.length} 字符)`);
       } else {
-        this.viewModel.addLog(LogLevel.ERROR, '更新剪切板失败');
+        this.viewModel.addLog(LogLevel.ERROR, "更新剪切板失败");
       }
     } catch (error) {
       this.viewModel.addLog(LogLevel.ERROR, `处理文本消息失败: ${JSON.stringify(error)}`);
@@ -215,7 +229,7 @@ export class ClipboardController {
    */
   private async handleImageMessage(message: BinaryMessage): Promise<void> {
     try {
-      this.viewModel.addLog(LogLevel.INFO, '接收到图片数据');
+      this.viewModel.addLog(LogLevel.INFO, "接收到图片数据");
 
       // 获取图片二进制数据
       // 如果消息包含元数据（HAS_META 标志），则使用 binaryData
@@ -234,20 +248,17 @@ export class ClipboardController {
         }
       }
 
-      // 将二进制数据转换为 Base64（ClipboardMonitor 目前仍需要 Base64 格式）
-      const base64Helper = new util.Base64Helper();
-      const base64 = base64Helper.encodeToStringSync(imageData);
-
+      // V1.1 二进制协议：直接使用 ArrayBuffer，无需 Base64 转换
       const clipboardData: ClipboardData = {
         type: ClipboardDataType.IMAGE,
-        imageBase64: base64
+        imageBytes: imageData.buffer as ArrayBuffer,
       };
 
       const success = await this.clipboardMonitor.setClipboardData(clipboardData);
       if (success) {
-        this.viewModel.addLog(LogLevel.SUCCESS, '已更新剪切板图片');
+        this.viewModel.addLog(LogLevel.SUCCESS, "已更新剪切板图片");
       } else {
-        this.viewModel.addLog(LogLevel.ERROR, '更新剪切板失败');
+        this.viewModel.addLog(LogLevel.ERROR, "更新剪切板失败");
       }
     } catch (error) {
       this.viewModel.addLog(LogLevel.ERROR, `处理图片消息失败: ${JSON.stringify(error)}`);
