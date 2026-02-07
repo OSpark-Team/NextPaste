@@ -4,8 +4,6 @@ NextPaste 的 PC 服务端应用，基于 Wails 框架开发，提供 WebSocket 
 
 ## 功能特性
 
-> 因为跨平台支持可能无法监听所有的图片写入，在Windows平台测试使用系统自带和QQ截图正常，微信截图无法监听变化。
-
 ### 🚀 核心功能
 
 - **WebSocket 服务器**：支持多客户端连接，实现跨设备剪贴板同步
@@ -21,6 +19,18 @@ NextPaste 的 PC 服务端应用，基于 Wails 框架开发，提供 WebSocket 
 - **实时日志**：支持日志级别过滤和清空
 - **状态监控**：实时显示服务运行状态和客户端数量
 
+## Windows 图片监听说明
+
+为提升 Windows 端图片剪贴板的兼容性（尤其是微信截图、Snipaste 等常见工具），服务端使用了对 `golang.design/x/clipboard` 的 fork：
+
+- `go.mod` 通过 `replace` 指向：`golang.design/x/clipboard => github.com/Okysu/clipboard v0.0.0-20260207041531-2b2e2d7c4eca`
+- `FmtImage` 读取策略扩展：按优先级尝试
+  - `CF_DIBV5` -> `CF_DIB` -> 注册格式 `PNG` -> `CF_BITMAP`（`HBITMAP`，GDI 转 PNG）
+- `Watch` 修复/增强：增加 `ticker.Stop()`，读取失败仍推进 sequence number，避免重复触发
+- 新增 Windows-only 测试：`clipboard_windows_watch_test.go`
+
+效果：Windows 上微信截图和 Snipaste 等写入图片时，可以稳定触发监听并读到 PNG bytes。
+
 ## 快速开始
 
 ### 前置要求
@@ -33,7 +43,9 @@ NextPaste 的 PC 服务端应用，基于 Wails 框架开发，提供 WebSocket 
 
 ```bash
 # 安装 Go 依赖
-go get golang.design/x/clipboard
+# 项目已在 go.mod 中通过 replace 使用 github.com/Okysu/clipboard
+cd ..
+cd server
 go mod tidy
 
 # 安装前端依赖
@@ -70,7 +82,7 @@ wails build
 - **Go 1.23**：主要编程语言
 - **Wails v2**：桌面应用框架
 - **gorilla/websocket**：WebSocket 实现
-- **golang.design/x/clipboard**：跨平台剪贴板库
+- **github.com/Okysu/clipboard**：跨平台剪贴板库（fork 自 `golang.design/x/clipboard`，Windows 端增强图片读取与监听）
 
 ### 前端技术栈
 

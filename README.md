@@ -46,6 +46,7 @@ NextPaste/
 * **零配置启动**：自动检测本地所有 IP 地址，生成连接二维码或地址
 * **协议完整实现**：支持握手校验、心跳保持（Heartbeat）及数据广播
 * **状态看板**：实时显示当前连接的客户端数量及同步记录
+* **Windows 图片监听增强**：兼容更多截图/IM 工具写入方式（见下方“Windows 图片监听兼容性”）
 
 ### 中继服务器
 
@@ -68,7 +69,23 @@ NextPaste/
 ### 核心技术栈
 
 * **Client**: HarmonyOS SDK, ArkUI, @ohos.net.webSocket, PersistentStorage.
-* **Server**: Go 1.23, Wails v2, gorilla/websocket, golang.design/x/clipboard.
+* **Server**: Go 1.23, Wails v2, gorilla/websocket, `github.com/Okysu/clipboard`.
+
+---
+
+## Windows 图片监听兼容性
+
+为提升 Windows 端 `FmtImage` 的可用性（尤其是微信截图、Snipaste 等常见工具），本项目在服务端使用了对 `golang.design/x/clipboard` 的 fork：
+
+- `go.mod` 中通过 `replace` 指向：`golang.design/x/clipboard => github.com/Okysu/clipboard v0.0.0-20260207041531-2b2e2d7c4eca`
+- Windows 图片读取策略扩展：不再只依赖 `CF_DIBV5`，而是按优先级尝试：
+  - `CF_DIBV5` -> `CF_DIB` -> 注册格式 `PNG` -> `CF_BITMAP`（`HBITMAP`，GDI 转 PNG）
+- `Watch` 行为修复/增强：
+  - 增加 `ticker.Stop()`，避免 goroutine/ticker 泄漏
+  - 读取失败时仍推进 sequence number，避免同一次变更被重复触发
+- 新增 Windows-only 测试：`clipboard_windows_watch_test.go` 覆盖 `Watch(ctx, FmtImage)` 能收到变更并读到 PNG bytes
+
+效果：微信和 Snipaste 的截图/图片写入，在 Windows 上也可以稳定触发监听并读取到 PNG bytes。
 
 ---
 
@@ -80,8 +97,8 @@ NextPaste/
 | --- | --- | --- |
 | **文本同步** | ✅ 正常 | 跨设备文本传输稳定 |
 | **QQ/系统截图** | ✅ 正常 | 能够识别标准 PNG/DIB 格式并触发监听 |
-| **微信截图** | ❌ 无法监听 | **微信在写入剪切板时使用了私有或特定的注册格式**，常规跨平台库可能无法捕获其变更事件。 |
-| **大图传输** | ⚠️ 延迟 | 受限于局域网带宽，高分辨率图片（Base64 编码）可能存在一定的传输延迟。 |
+| **微信截图** | ✅ 正常 (Windows) | Windows 端已增强图片读取策略（支持 DIB/PNG/Bitmap 等） |
+| **大图传输** | ⚠️ 延迟 | 受限于局域网带宽，高分辨率图片（主要耗时在写入剪贴板）可能存在一定的传输延迟。 |
 
 ---
 
@@ -97,7 +114,6 @@ wails dev  # 开发模式
 wails build # 构建正式版
 
 ```
-
 
 4. 在界面点击 **“启动服务”**，记下显示的 `ws://` 地址。
 
@@ -128,7 +144,7 @@ wails build # 构建正式版
 ## 贡献与许可
 
 * **许可证**：本项目基于 [MIT License](https://www.google.com/search?q=LICENSE) 开源，仅供学习和研究使用。
-* **贡献**：欢迎提交 Issue 或 Pull Request 来改进微信截图兼容性或其他功能。
+* **贡献**：欢迎提交 Issue 或 Pull Request 来改进跨平台图片兼容性或其他功能。
 
 ---
 

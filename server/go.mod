@@ -41,3 +41,5 @@ require (
 )
 
 // replace github.com/wailsapp/wails/v2 v2.11.0 => C:\Users\10423\go\pkg\mod
+
+replace golang.design/x/clipboard => github.com/Okysu/clipboard v0.0.0-20260207041531-2b2e2d7c4eca
