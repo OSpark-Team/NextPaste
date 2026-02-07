@@ -12,8 +12,11 @@ import (
 var assets embed.FS
 
 func main() {
+	flags := parseFlags()
+
 	// 创建应用实例
 	app := NewApp()
+	app.SetLaunchFlags(flags)
 
 	// 创建并运行应用
 	err := wails.Run(&options.App{

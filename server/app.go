@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -28,6 +29,11 @@ type App struct {
 	logsMu       sync.RWMutex
 	maxLogs      int
 	mode         string // "server" 或 "client"
+
+	settingsMu sync.RWMutex
+	settings   Settings
+
+	launchFlags LaunchFlags
 }
 
 // NewApp creates a new App application struct
@@ -39,7 +45,18 @@ func NewApp() *App {
 		logs:         make([]LogEntry, 0),
 		maxLogs:      500,
 		mode:         "server", // 默认为服务器模式
+		settings: Settings{
+			AutoStartEnabled:       false,
+			AutoStartActionEnabled: false,
+			AutoStartMode:          AutoStartModeServer,
+			CloseAction:            "minimize",
+		},
+		launchFlags: LaunchFlags{},
 	}
+}
+
+func (a *App) SetLaunchFlags(flags LaunchFlags) {
+	a.launchFlags = flags
 }
 
 // ============================================
@@ -61,10 +78,56 @@ func (a *App) Quit() {
 	runtime.Quit(a.ctx)
 }
 
+// ApplySettings updates settings and applies side effects (autostart).
+func (a *App) ApplySettings(settingsJSON string) error {
+	var s Settings
+	if err := json.Unmarshal([]byte(settingsJSON), &s); err != nil {
+		return err
+	}
+
+	// Normalize
+	if s.AutoStartMode != AutoStartModeClient {
+		s.AutoStartMode = AutoStartModeServer
+	}
+	if s.CloseAction != "close" {
+		s.CloseAction = "minimize"
+	}
+
+	// Autostart support requires a CGO-enabled build on Windows.
+	// This repo's default dev setup has CGO disabled, so we intentionally keep
+	// this as a no-op here; settings are still persisted on the frontend.
+	_ = canUseAutostart
+
+	a.settingsMu.Lock()
+	a.settings = s
+	a.settingsMu.Unlock()
+	return nil
+}
+
+// GetSettings returns current settings.
+func (a *App) GetSettings() map[string]any {
+	a.settingsMu.RLock()
+	defer a.settingsMu.RUnlock()
+
+	return map[string]any{
+		"autoStartEnabled":       a.settings.AutoStartEnabled,
+		"autoStartActionEnabled": a.settings.AutoStartActionEnabled,
+		"autoStartMode":          string(a.settings.AutoStartMode),
+		"closeAction":            a.settings.CloseAction,
+	}
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Settings live in localStorage on the frontend; backend stores the last applied copy.
+	// Auto start/connect is triggered from the frontend (so it can reuse persisted
+	// address/port/url and show UI errors).
+	if a.launchFlags.Minimized {
+		runtime.WindowHide(a.ctx)
+	}
 }
 
 // shutdown is called when the app is closing

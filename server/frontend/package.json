@@ -5,16 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit -p tsconfig.vite.json && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "naive-ui": "^2.43.2",
     "qrcode": "^1.5.4",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^31.0.0",
     "vue": "^3.2.37"
   },
   "devDependencies": {
     "@babel/types": "^7.18.10",
     "@types/qrcode": "^1.5.6",
+    "@vicons/ionicons5": "^0.13.0",
     "@vitejs/plugin-vue": "^3.0.3",
     "typescript": "^4.6.4",
     "vite": "^3.0.7",

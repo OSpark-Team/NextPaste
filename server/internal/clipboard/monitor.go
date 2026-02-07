@@ -38,9 +38,9 @@ func NewMonitor() *Monitor {
 
 // Start 初始化并启动剪贴板监听任务
 func (m *Monitor) Start(callback ChangeCallback) error {
-	if m.cancel != nil {
-		return fmt.Errorf("monitor already started")
-	}
+	// Make Start idempotent: if already started, stop previous watchers and
+	// restart them with the new callback.
+	m.Stop()
 
 	if err := clipboard.Init(); err != nil {
 		return fmt.Errorf("failed to initialize clipboard: %w", err)
@@ -65,6 +65,7 @@ func (m *Monitor) Start(callback ChangeCallback) error {
 
 // Stop 停止监听并释放相关资源
 func (m *Monitor) Stop() {
+	// Cancel and wait any running watchers.
 	if m.cancel != nil {
 		m.cancel()
 		m.wg.Wait()
